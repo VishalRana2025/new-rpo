@@ -1,0 +1,34 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Node modules
+node_modules
+
+# Build files
+dist
+dist-ssr
+*.local
+
+# Environment files (🔥 VERY IMPORTANT)
+.env
+backend/.env
+
+# Unwanted files (🔥 FIX YOUR ISSUE)
+backend/node
+
+# Editor files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
