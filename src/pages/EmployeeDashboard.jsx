@@ -1059,7 +1059,7 @@ if (userPermissions.allCandidates) allowed.push("all-candidates");
                 activePage === "clients" ? "bg-blue-600" : "hover:bg-blue-500"
               }`}
             >
-              <span>👥</span> All Clients
+              <span>👥</span>  Clients
             </li>
           )}
 
@@ -1072,28 +1072,18 @@ if (userPermissions.allCandidates) allowed.push("all-candidates");
                 activePage === "all-requirements" ? "bg-blue-600" : "hover:bg-blue-500"
               }`}
             >
-              <span>📋</span> All Requirements
+              <span>📋</span> Requirements
             </li>
           )}
-          {(isAdmin || (currentUser?.isApproved && userPermissions.newCandidate)) && (
-  <li
-    onClick={() => handlePageChange("candidate")}
-    className={`px-6 py-3 cursor-pointer flex items-center gap-2 ${
-      activePage === "candidate" ? "bg-blue-600" : "hover:bg-blue-500"
-    }`}
-  >
-    <span>🎯</span> Candidate Detail
-  </li>
-)}
-
+         
 {(isAdmin || (currentUser?.isApproved && userPermissions.allCandidates)) && (
-  <li
+  <li 
     onClick={() => handlePageChange("all-candidates")}
     className={`px-6 py-3 cursor-pointer flex items-center gap-2 ${
       activePage === "all-candidates" ? "bg-blue-600" : "hover:bg-blue-500"
     }`}
   >
-    <span>📊</span> All Candidates
+    <span>📊</span>  Candidates
   </li>
 )}
         </ul>

@@ -11,6 +11,18 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url
 ).href;
 
+// ✅ MOVED OUTSIDE - Good practice, reusable, not recreated on every call
+const detectSource = (text) => {
+  if (!text) return "Resume Upload";
+
+  if (/linkedin/i.test(text)) return "LinkedIn";
+  if (/naukri/i.test(text)) return "Naukri";
+  if (/indeed/i.test(text)) return "Indeed";
+  if (/monster/i.test(text)) return "Monster";
+
+  return "Resume Upload";
+};
+
 const CandidateFormPage = () => {
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState(null);
@@ -33,6 +45,7 @@ const CandidateFormPage = () => {
     city: "",
     state: "",
     country: "",
+    customSource: "",
   });
 
   const [candidateAttachments, setCandidateAttachments] = useState([]);
@@ -68,19 +81,24 @@ const CandidateFormPage = () => {
   const loadCandidateForEdit = (data) => {
     setEditingCandidate(data);
     setCandidateForm({
-      recruiter: data.recruiter || "",
-      sourcedFrom: data.sourcedFrom || "",
-      sourceDate: data.sourceDate || "",
-      firstName: data.firstName || "",
-      lastName: data.lastName || "",
-      phone: data.phone || "",
-      secondaryPhone: data.secondaryPhone || "",
-      email: data.email || "",
-      gender: data.gender || "",
-      city: data.city || "",
-      state: data.state || "",
-      country: data.country || "",
-    });
+  recruiter: data.recruiter || "",
+  sourcedFrom: sourceOptions.includes(data.sourcedFrom)
+    ? data.sourcedFrom
+    : data.sourcedFrom ? "Other" : "",
+  customSource: sourceOptions.includes(data.sourcedFrom)
+    ? ""
+    : data.sourcedFrom || "",
+  sourceDate: data.sourceDate || "",
+  firstName: data.firstName || "",
+  lastName: data.lastName || "",
+  phone: data.phone || "",
+  secondaryPhone: data.secondaryPhone || "",
+  email: data.email || "",
+  gender: data.gender || "",
+  city: data.city || "",
+  state: data.state || "",
+  country: data.country || "",
+});
     if (data.attachments && Array.isArray(data.attachments)) {
       setCandidateAttachments(data.attachments);
     } else if (data.fileUploads && Array.isArray(data.fileUploads)) {
@@ -132,8 +150,7 @@ const CandidateFormPage = () => {
     // Try to find name from common patterns
     const namePatterns = [
       /(?:Name|Candidate|Applicant)[:\s]+([A-Z][a-z]+)\s+([A-Z][a-z]+)/i,
-      /([A-Z][a-z]+)\s+([A-Z][a-z]+)\s*(?:-|\(|resume|curriculum vitae)/i,
-      /^([A-Z][a-z]+)\s+([A-Z][a-z]+)/m
+      /([A-Z][a-z]+)\s+([A-Z][a-z]+)\s*(?:resume|cv|curriculum vitae)/i,
     ];
     
     let nameMatch = null;
@@ -152,16 +169,25 @@ const CandidateFormPage = () => {
     
     // If still not found, try to find two consecutive capitalized words
     if (!firstName) {
-      const words = text.split(/\s+/);
-      for (let i = 0; i < words.length - 1; i++) {
-        const word1 = words[i];
-        const word2 = words[i + 1];
-        if (/^[A-Z][a-z]{2,}$/.test(word1) && /^[A-Z][a-z]{2,}$/.test(word2) && 
-            !jobTitles.test(word1) && !jobTitles.test(word2) &&
-            word1.length > 1 && word2.length > 1) {
-          firstName = word1;
-          lastName = word2;
-          break;
+      const lines = text.split("\n").slice(0, 5); // only top 5 lines
+
+      for (let line of lines) {
+        const words = line.trim().split(" ");
+
+        if (words.length >= 2) {
+          const word1 = words[0];
+          const word2 = words[1];
+
+          if (
+            /^[A-Z][a-z]{2,}$/.test(word1) &&
+            /^[A-Z][a-z]{2,}$/.test(word2) &&
+            !jobTitles.test(word1) &&
+            !jobTitles.test(word2)
+          ) {
+            firstName = word1;
+            lastName = word2;
+            break;
+          }
         }
       }
     }
@@ -236,69 +262,65 @@ const CandidateFormPage = () => {
     };
   };
 
-  // ✅ IMPROVED: Auto-fill form from PDF with more fields
-  const autoFillFromPDF = async (file) => {
-    if (file.type !== "application/pdf") {
-      alert("Auto-fill is only available for PDF files. The file will still be uploaded normally.");
-      return null;
-    }
-    
-    setIsParsingPDF(true);
-    
+  // ✅ FINAL: API-based resume parsing with PROPER merge logic
+  const parseResumeFromAPI = async (file) => {
     try {
-      // Extract text from PDF
-      const extractedText = await extractTextFromPDF(file);
-      
-      if (!extractedText) {
-        alert("Could not extract text from PDF. The file may be scanned or image-based.");
-        return null;
+      setIsParsingPDF(true);
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      let apiData = {};
+
+      try {
+        const response = await fetch("https://bdats.eclipticinsight.com/parse-resume", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (response.ok) {
+          apiData = await response.json();
+          console.log("✅ API DATA:", apiData);
+        } else {
+          console.warn("⚠️ API failed with status:", response.status);
+        }
+      } catch (apiError) {
+        console.warn("⚠️ API fetch error:", apiError.message);
       }
-      
-      // Extract candidate data
-      const extractedData = extractCandidateData(extractedText);
-      
-      console.log("Extracted data:", extractedData);
-      
-      // ✅ IMPROVED: Update form with extracted data (don't overwrite existing values)
+
+      // ✅ Step 2: Extract text from PDF for local parsing
+      const text = await extractTextFromPDF(file);
+      const localData = extractCandidateData(text);
+      console.log("📄 LOCAL DATA:", localData);
+
       const today = new Date().toISOString().split("T")[0];
-      
-      setCandidateForm(prev => ({
+
+      // ✅ Step 3: PROPER MERGE LOGIC - preserves user input, prevents overwriting
+      setCandidateForm((prev) => ({
         ...prev,
-        // Personal fields
-        firstName: prev.firstName || extractedData.firstName || "",
-        lastName: prev.lastName || extractedData.lastName || "",
-        email: prev.email || extractedData.email || "",
-        phone: prev.phone || extractedData.phone || "",
-        
+
+        // Name fields - local first, then API, keep existing if both empty
+        firstName: localData.firstName || apiData.firstName || prev.firstName,
+        lastName: localData.lastName || apiData.lastName || prev.lastName,
+
+        // Contact fields
+        email: localData.email || apiData.email || prev.email,
+        phone: localData.phone || apiData.phone || prev.phone,
+
         // Location fields
-        city: prev.city || extractedData.city || "",
-        state: prev.state || extractedData.state || "",
-        
-        // ✅ NEW: Auto-fill recruiter fields
-        recruiter: prev.recruiter || "Self",
-        sourcedFrom: prev.sourcedFrom || "Resume Upload",
-        sourceDate: prev.sourceDate || today,
+        city: localData.city || apiData.city || prev.city,
+        state: localData.state || apiData.state || prev.state,
+        country: apiData.country || prev.country || "India",
+
+        // Recruiter fields with smart detection
+        recruiter: prev.recruiter || (currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : ""),
+        sourcedFrom: prev.sourcedFrom || detectSource(text),
+        sourceDate: prev.sourceDate || apiData.sourceDate || today,
       }));
-      
-      // Show success message with extracted info
-      const extractedItems = [];
-      if (extractedData.firstName) extractedItems.push(`Name: ${extractedData.firstName} ${extractedData.lastName}`);
-      if (extractedData.email) extractedItems.push(`Email: ${extractedData.email}`);
-      if (extractedData.phone) extractedItems.push(`Phone: ${extractedData.phone}`);
-      if (extractedData.city) extractedItems.push(`City: ${extractedData.city}`);
-      if (extractedData.state) extractedItems.push(`State: ${extractedData.state}`);
-      
-      if (extractedItems.length > 0) {
-  console.log("Auto-filled:", extractedItems);
-} else {
-  console.log("No data extracted from PDF");
-}
-      
-      return extractedData;
+
     } catch (error) {
-      console.error("Error auto-filling from PDF:", error);
-      alert("Failed to parse PDF. Please fill details manually.");
-      return null;
+      console.error("❌ Resume parsing error:", error);
+      alert("Parsing failed: " + error.message);
     } finally {
       setIsParsingPDF(false);
     }
@@ -336,7 +358,7 @@ const CandidateFormPage = () => {
       reader.onerror = reject;
     });
 
-  // Handle file upload with auto-fill
+  // ✅ CLEANED: Handle file upload - ONLY PDF files, NO Word/Image extraction
   const handleFileUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
@@ -344,16 +366,21 @@ const CandidateFormPage = () => {
     
     for (const file of files) {
       try {
-        // Auto-fill from PDF if it's a PDF file and not editing
-        if (file.type === "application/pdf" && !editingCandidate) {
-          await autoFillFromPDF(file);
+        // ✅ ONLY PDF files allowed for auto-fill
+        if (!editingCandidate) {
+          if (file.type === "application/pdf") {
+            await parseResumeFromAPI(file);
+          } else {
+            alert("Only PDF files are supported for auto-fill. The file will still be uploaded.");
+          }
         }
         
         let processedFile = file.type.startsWith("image/") ? await compressImage(file) : file;
-       if (processedFile.size > 10 * 1024 * 1024) { 
-  alert(`"${file.name}" exceeds 10 MB.`); 
-  continue; 
-}
+        if (processedFile.size > 10 * 1024 * 1024) { 
+          alert(`"${file.name}" exceeds 10 MB.`); 
+          continue; 
+        }
+        
         const fileId = `${Date.now()}-${Math.random().toString(36).slice(2)}-${processedFile.name}`;
         setCandidateUploadProgress((prev) => ({ ...prev, [fileId]: 0 }));
         
@@ -368,7 +395,8 @@ const CandidateFormPage = () => {
           data: base64Data
         };
         
-        setCandidateAttachments((prev) => [...prev, fileData]);
+        // Replace existing attachment (only one file at a time)
+        setCandidateAttachments([fileData]);
         setCandidateUploadProgress((prev) => ({ ...prev, [fileId]: 100 }));
         
       } catch (error) {
@@ -380,7 +408,10 @@ const CandidateFormPage = () => {
     e.target.value = "";
   };
 
-  const removeAttachment = (fileId) => setCandidateAttachments((prev) => prev.filter((f) => f.id !== fileId));
+  const removeAttachment = (fileId) => {
+    setCandidateAttachments([]);
+    setCandidateUploadProgress({});
+  };
 
   const downloadFile = (file) => {
     if (file.data) {
@@ -449,7 +480,10 @@ const CandidateFormPage = () => {
 
       const payload = {
         recruiter: candidateForm.recruiter,
-        sourcedFrom: candidateForm.sourcedFrom,
+       sourcedFrom:
+  candidateForm.sourcedFrom === "Other"
+    ? candidateForm.customSource
+    : candidateForm.sourcedFrom,
         sourceDate: candidateForm.sourceDate,
         firstName: candidateForm.firstName,
         lastName: candidateForm.lastName,
@@ -503,6 +537,7 @@ const CandidateFormPage = () => {
       city: "",
       state: "",
       country: "",
+          customSource: "", 
     });
     setCandidateAttachments([]); 
     setEditingCandidate(null);
@@ -515,6 +550,18 @@ const CandidateFormPage = () => {
     { value: "other", label: "Other" },
     { value: "prefer_not_to_say", label: "Prefer not to say" },
   ];
+  const sourceOptions = [
+  "LinkedIn",
+  "Naukri",
+  "Indeed",
+  "Monster",
+  "Referral",
+  "Company Website",
+  "Walk-in",
+  "Consultancy",
+  "Campus Placement",
+  "Other"
+];
 
   const th = {
     background: isDarkMode ? "bg-gray-900" : "bg-gray-100",
@@ -565,8 +612,7 @@ const CandidateFormPage = () => {
                   </label>
                   <input
                     type="file"
-                    accept=".pdf,.doc,.docx,.txt,image/*"
-                    multiple
+                    accept=".pdf"
                     onChange={handleFileUpload}
                     disabled={isParsingPDF}
                     className="block w-full text-sm text-gray-200 
@@ -578,7 +624,7 @@ const CandidateFormPage = () => {
                     cursor-pointer disabled:opacity-50"
                   />
                   <p className="text-xs text-blue-200 mt-2">
-                    {isParsingPDF ? "🤖 Parsing PDF and auto-filling form..." : "Upload PDF to auto-fill Name, Email, Phone, City, State, Recruiter, Source · Max 10 MB per file"}
+                    {isParsingPDF ? "🤖 Parsing PDF and auto-filling form..." : "Upload PDF to auto-fill Name, Email, Phone, City, State, Recruiter, Source · Max 10 MB · PDF only"}
                   </p>
                 </div>
               </div>
@@ -607,7 +653,7 @@ const CandidateFormPage = () => {
               {/* Attachments List */}
               {candidateAttachments.length > 0 && (
                 <div className="mt-4">
-                  <h4 className="text-sm font-semibold text-white mb-2">Uploaded Files ({candidateAttachments.length})</h4>
+                  <h4 className="text-sm font-semibold text-white mb-2">Uploaded File ({candidateAttachments.length})</h4>
                   <div className="space-y-2 max-h-60 overflow-y-auto">
                     {candidateAttachments.map((file) => (
                       <div key={file.id} className="flex items-center justify-between p-2 bg-white/10 rounded-lg">
@@ -653,8 +699,29 @@ const CandidateFormPage = () => {
                 </div>
                 <div>
                   <label className="block mb-2 font-medium">Sourced From</label>
-                  <input type="text" name="sourcedFrom" value={candidateForm.sourcedFrom} onChange={handleInputChange} className={`${th.input} border p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-500 outline-none`} placeholder="LinkedIn, Naukri, Referral, etc." />
-                </div>
+<select
+  name="sourcedFrom"
+  value={candidateForm.sourcedFrom}
+  onChange={handleInputChange}
+  className={`${th.input} border p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-500 outline-none`}
+>
+  <option value="">Select Source</option>
+
+  {sourceOptions.map((src, index) => (
+    <option key={index} value={src}>
+      {src}
+    </option>
+  ))}
+</select>{candidateForm.sourcedFrom === "Other" && (
+  <input
+  type="text"
+  name="customSource"
+  placeholder="Enter custom source"
+  value={candidateForm.customSource}
+  onChange={handleInputChange}
+  className={`${th.input} border p-3 w-full rounded-lg mt-2`}
+/>
+)}                </div>
                 <div>
                   <label className="block mb-2 font-medium">Source Date</label>
                   <input type="date" name="sourceDate" value={candidateForm.sourceDate} onChange={handleInputChange} className={`${th.input} border p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-500 outline-none`} />

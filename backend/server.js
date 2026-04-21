@@ -16,15 +16,26 @@ const app = express();
 
 // Custom CORS handler for OPTIONS preflight requests
 app.use(cors({
-  origin: [
-    "http://localhost:5173",           // local
-    "https://ats.eclipticinsight.com"  // your frontend
-  ],
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  credentials: true
-}));
-app.use(express.json({ limit: "50mb" })); // Increased limit for base64 files
+  origin: function (origin, callback) {
+    const allowedOrigins = [
+      "https://ats.eclipticinsight.com",
+      "http://localhost:5173"
+    ];
 
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(null, true); // temporary allow all
+    }
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
+
+app.options("*", cors());
+app.use(express.json({ limit: "50mb" })); // Increased limit for base64 files
+app.use("/", resumeRoutes);
 // ================== FILE UPLOAD ==================
 const upload = multer({
   storage: multer.memoryStorage(),
