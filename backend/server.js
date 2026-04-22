@@ -19,7 +19,10 @@ app.use(cors({
   origin: function (origin, callback) {
     const allowedOrigins = [
       "https://ats.eclipticinsight.com",
-      "http://localhost:5173"
+      "https://bdats.eclipticinsight.com",
+      "http://localhost:5173",
+      "http://localhost:5174",
+      "http://localhost:3000"
     ];
 
     if (!origin || allowedOrigins.includes(origin)) {
@@ -36,6 +39,7 @@ app.use(cors({
 app.options("*", cors());
 app.use(express.json({ limit: "50mb" })); // Increased limit for base64 files
 app.use("/", resumeRoutes);
+
 // ================== FILE UPLOAD ==================
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -63,15 +67,13 @@ const userSchema = new mongoose.Schema({
   isActive: { type: Boolean, default: true },
   
   permissions: {
-  newClient: { type: Boolean, default: false },
-  allClients: { type: Boolean, default: false },
-  newRequirement: { type: Boolean, default: false },
-  allRequirement: { type: Boolean, default: false },
-
-  // 🔥 ADD THIS
-  newCandidate: { type: Boolean, default: false },
-  allCandidates: { type: Boolean, default: false },
-},
+    newClient: { type: Boolean, default: false },
+    allClients: { type: Boolean, default: false },
+    newRequirement: { type: Boolean, default: false },
+    allRequirement: { type: Boolean, default: false },
+    newCandidate: { type: Boolean, default: false },
+    allCandidates: { type: Boolean, default: false },
+  },
   registeredAt: { type: Date, default: Date.now },
   profileImage: String,
   attendance: Array,
@@ -144,13 +146,13 @@ app.post("/api/register", async (req, res) => {
       isApproved: false,
       isActive: true,
       permissions: {
-  newClient: false,
-  allClients: false,
-  newRequirement: false,
-  allRequirement: false,
-  newCandidate: false,
-  allCandidates: false,
-},
+        newClient: false,
+        allClients: false,
+        newRequirement: false,
+        allRequirement: false,
+        newCandidate: false,
+        allCandidates: false,
+      },
       registeredAt: new Date(),
     });
 
@@ -352,37 +354,37 @@ app.put("/api/users/:userId/role", async (req, res) => {
     let permissions = {};
 
     if (role === "admin") {
-  permissions = {
-    newClient: true,
-    allClients: true,
-    newRequirement: true,
-    allRequirement: true,
-    newCandidate: true,
-    allCandidates: true,
-  };
-}
+      permissions = {
+        newClient: true,
+        allClients: true,
+        newRequirement: true,
+        allRequirement: true,
+        newCandidate: true,
+        allCandidates: true,
+      };
+    }
 
-if (role === "manager") {
-  permissions = {
-    newClient: true,
-    allClients: true,
-    newRequirement: true,
-    allRequirement: false,
-    newCandidate: true,
-    allCandidates: true,
-  };
-}
+    if (role === "manager") {
+      permissions = {
+        newClient: true,
+        allClients: true,
+        newRequirement: true,
+        allRequirement: false,
+        newCandidate: true,
+        allCandidates: true,
+      };
+    }
 
-if (role === "employee") {
-  permissions = {
-    newClient: true,
-    allClients: false,
-    newRequirement: false,
-    allRequirement: false,
-    newCandidate: true,
-    allCandidates: false,
-  };
-}
+    if (role === "employee") {
+      permissions = {
+        newClient: true,
+        allClients: false,
+        newRequirement: false,
+        allRequirement: false,
+        newCandidate: true,
+        allCandidates: false,
+      };
+    }
 
     const user = await User.findByIdAndUpdate(
       req.params.userId,
@@ -502,7 +504,6 @@ app.delete("/api/delete-client/:id", async (req, res) => {
 // ================== REQUIREMENT APIs ==================
 app.post("/api/add-requirement", upload.array("files"), async (req, res) => {
   try {
-    // ✅ Convert old field to new (recruiterLocation → clientLocation)
     if (req.body.recruiterLocation && !req.body.clientLocation) {
       req.body.clientLocation = req.body.recruiterLocation;
       console.log("✅ Converted recruiterLocation to clientLocation");
@@ -559,7 +560,6 @@ app.get("/api/requirements", async (req, res) => {
 
 app.put("/api/update-requirement/:id", async (req, res) => {
   try {
-    // ✅ Convert old field to new (recruiterLocation → clientLocation)
     if (req.body.recruiterLocation && !req.body.clientLocation) {
       req.body.clientLocation = req.body.recruiterLocation;
       console.log("✅ Converted recruiterLocation to clientLocation");
@@ -590,7 +590,7 @@ app.put("/api/update-requirement/:id", async (req, res) => {
     const updated = await Requirement.findByIdAndUpdate(
       req.params.id,
       updateData,
-      { new: true, runValidators: true }
+      { new: true, runValidators: false }
     );
 
     if (!updated) {
@@ -670,7 +670,7 @@ app.delete("/api/login-history", async (req, res) => {
 
 // ================== CANDIDATE APIs ==================
 
-// ✅ ADD THIS: GET SINGLE CANDIDATE BY ID
+// GET SINGLE CANDIDATE BY ID
 app.get("/api/candidates/:id", async (req, res) => {
   try {
     const candidate = await Candidate.findById(req.params.id);
@@ -694,14 +694,13 @@ app.get("/api/candidates", async (req, res) => {
   }
 });
 
-// ADD CANDIDATE - FIXED VERSION (preserves file data)
+// ADD CANDIDATE - FIXED VERSION
 app.post("/api/add-candidate", async (req, res) => {
   try {
     console.log("📦 Incoming request body keys:", Object.keys(req.body));
     
     let attachments = req.body.attachments;
     
-    // Parse attachments if it's a string
     if (typeof attachments === "string") {
       try {
         attachments = JSON.parse(attachments);
@@ -712,13 +711,11 @@ app.post("/api/add-candidate", async (req, res) => {
       }
     }
     
-    // Ensure attachments is an array
     if (!Array.isArray(attachments)) {
       console.warn("⚠️ Attachments is not an array, resetting to empty array");
       attachments = [];
     }
     
-    // Preserve ALL attachment fields including 'data'
     const validAttachments = attachments
       .filter(att => att && typeof att === 'object')
       .map(att => ({
@@ -727,7 +724,7 @@ app.post("/api/add-candidate", async (req, res) => {
         type: att.type || "application/octet-stream",
         size: att.size || 0,
         uploadedAt: att.uploadedAt || new Date().toISOString(),
-        data: att.data || null  // CRITICAL: Preserve the base64 file data
+        data: att.data || null
       }));
     
     console.log(`✅ Processing ${validAttachments.length} valid attachments`);
@@ -736,12 +733,42 @@ app.post("/api/add-candidate", async (req, res) => {
       console.log(`✅ First attachment name: ${validAttachments[0]?.name}`);
     }
     
-    // Create new candidate object
-    const { attachments: _, ...rest } = req.body;
-    
     const newCandidate = new Candidate({
-      ...rest,
+      firstName: req.body.firstName || "",
+      lastName: req.body.lastName || "",
+      email: req.body.email || "",
+      phone: req.body.phone || "",
+      secondaryPhone: req.body.secondaryPhone || "",
+      gender: req.body.gender || "",
+      city: req.body.city || "",
+      state: req.body.state || "",
+      country: req.body.country || "",
+      recruiter: req.body.recruiter || "",
+      sourcedFrom: req.body.sourcedFrom || "",
+      sourceDate: req.body.sourceDate || "",
+      qualification: req.body.qualification || "",
+      totalExperience: req.body.totalExperience || "",
+      currentCTC: req.body.currentCTC || "",
+      expectedCTC: req.body.expectedCTC || "",
+      noticePeriod: req.body.noticePeriod || "",
+      resume: req.body.resume || "",
+      status: req.body.status || "",
+      remark: req.body.remark || "",
+      tags: req.body.tags || [],
+    clientSections: (req.body.clientSections || []).map(cs => ({
+  clientName: cs.clientName || "",
+  designation: cs.designation || "",
+  clientLocation: cs.clientLocation || "",
+  process: cs.process || "",
+  processLOB: cs.processLOB || "",
+  salary: cs.salary || "",
+  hrRemark: cs.hrRemark || "",
+  clientStatus: cs.clientStatus || ""
+})),
+      interviewRounds: req.body.interviewRounds || [],
       attachments: validAttachments,
+      createdByName: req.body.createdByName || "",
+      createdBy: req.body.createdBy || null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -758,54 +785,114 @@ app.post("/api/add-candidate", async (req, res) => {
   }
 });
 
-// UPDATE CANDIDATE - FIXED VERSION (preserves file data)
+// UPDATE CANDIDATE - FULLY FIXED WITH SAFE FIELD MAPPING (NO ...req.body SPREAD)
 app.put("/api/update-candidate/:id", async (req, res) => {
   try {
-    let attachments = req.body.attachments;
+    console.log("📥 Incoming Update - ID:", req.params.id);
+    console.log("📥 Client Sections received:", req.body.clientSections?.length || 0);
     
-    // Parse attachments if it's a string
+    let attachments = req.body.attachments;
+
     if (typeof attachments === "string") {
       try {
         attachments = JSON.parse(attachments);
-      } catch (parseError) {
+      } catch {
         attachments = [];
       }
     }
-    
+
     if (!Array.isArray(attachments)) {
       attachments = [];
     }
-    
-    // Preserve ALL attachment fields including 'data'
-    const validAttachments = attachments
-      .filter(att => att && typeof att === 'object')
-      .map(att => ({
-        id: att.id || `${Date.now()}-${Math.random()}`,
-        name: att.name || "unnamed",
-        type: att.type || "application/octet-stream",
-        size: att.size || 0,
-        uploadedAt: att.uploadedAt || new Date().toISOString(),
-        data: att.data || null  // CRITICAL: Preserve the base64 file data
+
+    const validAttachments = attachments.map(att => ({
+      id: att.id || `${Date.now()}-${Math.random()}`,
+      name: att.name || "unnamed",
+      type: att.type || "application/octet-stream",
+      size: att.size || 0,
+      uploadedAt: att.uploadedAt || new Date().toISOString(),
+      data: att.data || null
+    }));
+
+    // Clean client sections - remove any invalid entries
+    const cleanClientSections = (req.body.clientSections || [])
+      .filter(cs => cs && (cs.clientName || cs.designation))
+      .map(cs => ({
+        clientName: cs.clientName || "",
+        designation: cs.designation || "",
+        clientLocation: cs.clientLocation || "",
+        process: cs.process || "",
+        processLOB: cs.processLOB || "",
+        salary: cs.salary || "",
+        hrRemark: cs.hrRemark || "",
+        clientStatus: cs.clientStatus || ""
       }));
-    
+
+    console.log(`✅ Clean client sections: ${cleanClientSections.length}`);
+
+    // ✅ SAFE UPDATE - NO ...req.body SPREAD - ONLY EXPLICIT FIELDS
     const updated = await Candidate.findByIdAndUpdate(
       req.params.id,
-      { 
-        ...req.body, 
+      {
+        // Basic Details
+        firstName: req.body.firstName || "",
+        lastName: req.body.lastName || "",
+        email: req.body.email || "",
+        phone: req.body.phone || "",
+        secondaryPhone: req.body.secondaryPhone || "",
+        
+        // Location & Contact
+        city: req.body.city || "",
+        state: req.body.state || "",
+        country: req.body.country || "",
+        
+        // Recruitment Info
+        recruiter: req.body.recruiter || "",
+        sourcedFrom: req.body.sourcedFrom || "",
+        sourceDate: req.body.sourceDate || "",
+        
+        // Professional Details
+        qualification: req.body.qualification || "",
+        totalExperience: req.body.totalExperience || "",
+        currentCTC: req.body.currentCTC || "",
+        expectedCTC: req.body.expectedCTC || "",
+        noticePeriod: req.body.noticePeriod || "",
+        resume: req.body.resume || "",
+        
+        // Status & Remarks
+        status: req.body.status || "",
+        remark: req.body.remark || "",
+        tags: req.body.tags || [],
+        
+        // Gender
+        gender: req.body.gender || "",
+        
+        // Client Sections (FIXED)
+        clientSections: cleanClientSections,
+        
+        // Interview Rounds
+        interviewRounds: req.body.interviewRounds || [],
+        
+        // Attachments
         attachments: validAttachments,
-        updatedAt: new Date() 
+        
+        // Update timestamp
+        updatedAt: new Date()
       },
-      { new: true, runValidators: true }
+      { new: true, runValidators: false }
     );
-    
+
     if (!updated) {
-      return res.status(404).json({ success: false, message: "Candidate not found" });
+      return res.status(404).json({ 
+        success: false, 
+        message: "Candidate not found" 
+      });
     }
-    
-    console.log(`✅ Candidate updated: ${req.params.id}`);
-    console.log(`✅ Updated with ${validAttachments.length} attachments`);
-    
-    res.json({ success: true, message: "Candidate updated successfully", data: updated });
+
+    console.log("✅ Candidate updated successfully:", updated._id);
+    console.log(`✅ Client sections saved: ${updated.clientSections?.length || 0}`);
+    res.json(updated);
+
   } catch (err) {
     console.error("Update error:", err);
     res.status(500).json({ error: err.message });
@@ -829,8 +916,7 @@ app.delete("/api/delete-candidate/:id", async (req, res) => {
   }
 });
 
-// ================== FORM FIELDS APIs (DYNAMIC FORM BUILDER) ==================
-// GET all form fields
+// ================== FORM FIELDS APIs ==================
 app.get("/api/form-fields", async (req, res) => {
   try {
     const fields = await FormField.find();
@@ -842,7 +928,6 @@ app.get("/api/form-fields", async (req, res) => {
   }
 });
 
-// ADD new form field
 app.post("/api/form-fields", async (req, res) => {
   try {
     const field = new FormField(req.body);
@@ -855,7 +940,6 @@ app.post("/api/form-fields", async (req, res) => {
   }
 });
 
-// DELETE form field by id
 app.delete("/api/form-fields/:id", async (req, res) => {
   try {
     const result = await FormField.deleteOne({ id: parseInt(req.params.id) });
@@ -870,7 +954,6 @@ app.delete("/api/form-fields/:id", async (req, res) => {
   }
 });
 
-// UPDATE form field (label or required status)
 app.put("/api/form-fields/:id", async (req, res) => {
   try {
     const updated = await FormField.findOneAndUpdate(
@@ -890,10 +973,8 @@ app.put("/api/form-fields/:id", async (req, res) => {
 });
 
 // ================== SERVER ==================
-const PORT = 5001;
+const PORT = process.env.PORT || 5001;
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`✅ Form Fields API available at: /api/form-fields`);
-  console.log(`✅ File upload limit: 10MB`);
 });

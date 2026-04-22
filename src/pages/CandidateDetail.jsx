@@ -23,7 +23,7 @@ const detectSource = (text) => {
   return "Resume Upload";
 };
 
-const CandidateFormPage = () => {
+const CandidateFormPage = ({ onSuccess }) => {
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState(null);
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -441,10 +441,24 @@ const CandidateFormPage = () => {
     return "📎";
   };
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setCandidateForm((prev) => ({ ...prev, [name]: value }));
-  };
+const handleInputChange = (e) => {
+  let { name, value } = e.target;
+
+  // ✅ PHONE VALIDATION (only digits + max 10)
+  if (name === "phone" || name === "secondaryPhone") {
+    value = value.replace(/\D/g, ""); // remove non-digits
+
+    if (value.length > 10) {
+      alert("Phone number must be only 10 digits ❌");
+      return;
+    }
+  }
+
+  setCandidateForm((prev) => ({
+    ...prev,
+    [name]: value,
+  }));
+};
 
   const validateForm = () => {
     if (!candidateForm.firstName?.trim()) { alert("First Name is required."); return false; }
@@ -456,6 +470,10 @@ const CandidateFormPage = () => {
     if (!candidateForm.phone?.trim()) { alert("Phone is required."); return false; }
     const totalSize = candidateAttachments.reduce((s, f) => s + (f.size || 0), 0);
     if (totalSize > 10 * 1024 * 1024) { alert("Total attachments exceed 10 MB."); return false; }
+    if (candidateForm.phone.length !== 10) {
+  alert("Phone number must be exactly 10 digits ❌");
+  return false;
+}
     return true;
   };
 
@@ -465,6 +483,34 @@ const CandidateFormPage = () => {
       alert("User not authenticated.");
       return;
     }
+    // ✅ FETCH FROM BACKEND
+const res = await api.get("/candidates");
+const existingCandidates = res.data;
+
+// ✅ CHECK EMAIL
+const duplicateEmail = existingCandidates.find(
+  (c) =>
+    c.email === candidateForm.email &&
+    c._id !== editingCandidate?._id
+);
+
+// ✅ CHECK PHONE
+const duplicatePhone = existingCandidates.find(
+  (c) =>
+    c.phone === candidateForm.phone &&
+    c._id !== editingCandidate?._id
+);
+
+// ✅ SHOW ALERT
+if (duplicateEmail) {
+  alert("This email already exists ❌");
+  return;
+}
+
+if (duplicatePhone) {
+  alert("This phone number already exists ❌");
+  return;
+}
 
     setIsLoading(true);
 
@@ -489,7 +535,7 @@ const CandidateFormPage = () => {
         lastName: candidateForm.lastName,
         phone: candidateForm.phone,
         secondaryPhone: candidateForm.secondaryPhone,
-        email: candidateForm.email,
+        email: candidateForm.email.toLowerCase(),
         gender: candidateForm.gender,
         city: candidateForm.city,
         state: candidateForm.state,
@@ -510,9 +556,14 @@ const CandidateFormPage = () => {
         alert("✅ Candidate updated successfully!");
         navigate("/candidates");
       } else {
-        await api.post("/add-candidate", payload);
-        alert("✅ Candidate added successfully!");
-        resetForm();
+      await api.post("/add-candidate", payload);
+
+alert("✅ Candidate added successfully!");
+
+// 🔥 CALL PARENT FUNCTION
+if (onSuccess) {
+  await onSuccess();
+}
       }
 
     } catch (err) {
@@ -743,12 +794,26 @@ const CandidateFormPage = () => {
                 </div>
                 <div>
                   <label className="block mb-2 font-medium">Phone <span className="text-red-500">*</span></label>
-                  <input type="tel" name="phone" value={candidateForm.phone} onChange={handleInputChange} className={`${th.input} border p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-500 outline-none`} placeholder="+91 1234567890" />
-                </div>
+<input
+  type="tel"
+  name="phone"
+  value={candidateForm.phone}
+  maxLength="10"
+  onChange={handleInputChange}
+  className={`${th.input} border p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-500 outline-none`}
+  placeholder="Enter 10 digit phone number"
+/>                </div>
                 <div>
                   <label className="block mb-2 font-medium">Secondary Phone</label>
-                  <input type="tel" name="secondaryPhone" value={candidateForm.secondaryPhone} onChange={handleInputChange} className={`${th.input} border p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-500 outline-none`} placeholder="Alternate phone number" />
-                </div>
+<input
+  type="tel"
+  name="secondaryPhone"
+  value={candidateForm.secondaryPhone}
+  maxLength="10"
+  onChange={handleInputChange}
+  className={`${th.input} border p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-500 outline-none`}
+  placeholder="Enter 10 digit alternate number"
+/>                </div>
                 <div>
                   <label className="block mb-2 font-medium">Email <span className="text-red-500">*</span></label>
                   <input type="email" name="email" value={candidateForm.email} onChange={handleInputChange} className={`${th.input} border p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-500 outline-none`} placeholder="john.doe@example.com" />
