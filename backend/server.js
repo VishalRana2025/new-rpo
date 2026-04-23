@@ -9,6 +9,7 @@ const resumeRoutes = require("./src/routes/resumeRoutes");
 const Requirement = require("./models/Requirement");
 const Client = require("./models/Client");
 const Candidate = require("./models/Candidate");
+const ActivityLog = require("./models/ActivityLog");
 
 const app = express();
 
@@ -753,6 +754,7 @@ app.post("/api/add-candidate", async (req, res) => {
       noticePeriod: req.body.noticePeriod || "",
       resume: req.body.resume || "",
       status: req.body.status || "",
+      candidateStatus: req.body.candidateStatus || "", // ✅ ADD THIS
       remark: req.body.remark || "",
       tags: req.body.tags || [],
     clientSections: (req.body.clientSections || []).map(cs => ({
@@ -788,117 +790,73 @@ app.post("/api/add-candidate", async (req, res) => {
 // UPDATE CANDIDATE - FULLY FIXED WITH SAFE FIELD MAPPING (NO ...req.body SPREAD)
 app.put("/api/update-candidate/:id", async (req, res) => {
   try {
-    console.log("📥 Incoming Update - ID:", req.params.id);
-    console.log("📥 Client Sections received:", req.body.clientSections?.length || 0);
-    
-    let attachments = req.body.attachments;
+    const { id } = req.params;
 
-    if (typeof attachments === "string") {
-      try {
-        attachments = JSON.parse(attachments);
-      } catch {
-        attachments = [];
-      }
-    }
-
-    if (!Array.isArray(attachments)) {
-      attachments = [];
-    }
-
-    const validAttachments = attachments.map(att => ({
-      id: att.id || `${Date.now()}-${Math.random()}`,
-      name: att.name || "unnamed",
-      type: att.type || "application/octet-stream",
-      size: att.size || 0,
-      uploadedAt: att.uploadedAt || new Date().toISOString(),
-      data: att.data || null
+    const cleanClientSections = (req.body.clientSections || []).map(cs => ({
+      clientName: cs?.clientName || "",
+      designation: cs?.designation || "",
+      clientLocation: cs?.clientLocation || "",
+      process: cs?.process || "",
+      processLOB: cs?.processLOB || "",
+      salary: cs?.salary || "",
+      hrRemark: cs?.hrRemark || "",
+      clientStatus: cs?.clientStatus || ""
     }));
 
-    // Clean client sections - remove any invalid entries
-    const cleanClientSections = (req.body.clientSections || [])
-      .filter(cs => cs && (cs.clientName || cs.designation))
-      .map(cs => ({
-        clientName: cs.clientName || "",
-        designation: cs.designation || "",
-        clientLocation: cs.clientLocation || "",
-        process: cs.process || "",
-        processLOB: cs.processLOB || "",
-        salary: cs.salary || "",
-        hrRemark: cs.hrRemark || "",
-        clientStatus: cs.clientStatus || ""
-      }));
+    const updateData = {
+      firstName: req.body.firstName || "",
+      lastName: req.body.lastName || "",
+      email: req.body.email || "",
+      phone: req.body.phone || "",
+      secondaryPhone: req.body.secondaryPhone || "",
+      gender: req.body.gender || "",
+      city: req.body.city || "",
+      state: req.body.state || "",
+      country: req.body.country || "",
+      recruiter: req.body.recruiter || "",
+      sourcedFrom: req.body.sourcedFrom || "",
+      sourceDate: req.body.sourceDate || "",
+      qualification: req.body.qualification || "",
+      totalExperience: req.body.totalExperience || "",
+      currentCTC: req.body.currentCTC || "",
+      expectedCTC: req.body.expectedCTC || "",
+      noticePeriod: req.body.noticePeriod || "",
+      resume: req.body.resume || "",
+      status: req.body.status || "",
+      candidateStatus: req.body.candidateStatus || "", // ✅ IMPORTANT
+      remark: req.body.remark || "",
+      tags: req.body.tags || [],
+      interviewRounds: req.body.interviewRounds || [],
+      attachments: req.body.attachments || [],
+      clientSections: cleanClientSections,
+      updatedAt: new Date()
+    };
 
-    console.log(`✅ Clean client sections: ${cleanClientSections.length}`);
-
-    // ✅ SAFE UPDATE - NO ...req.body SPREAD - ONLY EXPLICIT FIELDS
     const updated = await Candidate.findByIdAndUpdate(
-      req.params.id,
-      {
-        // Basic Details
-        firstName: req.body.firstName || "",
-        lastName: req.body.lastName || "",
-        email: req.body.email || "",
-        phone: req.body.phone || "",
-        secondaryPhone: req.body.secondaryPhone || "",
-        
-        // Location & Contact
-        city: req.body.city || "",
-        state: req.body.state || "",
-        country: req.body.country || "",
-        
-        // Recruitment Info
-        recruiter: req.body.recruiter || "",
-        sourcedFrom: req.body.sourcedFrom || "",
-        sourceDate: req.body.sourceDate || "",
-        
-        // Professional Details
-        qualification: req.body.qualification || "",
-        totalExperience: req.body.totalExperience || "",
-        currentCTC: req.body.currentCTC || "",
-        expectedCTC: req.body.expectedCTC || "",
-        noticePeriod: req.body.noticePeriod || "",
-        resume: req.body.resume || "",
-        
-        // Status & Remarks
-        status: req.body.status || "",
-        remark: req.body.remark || "",
-        tags: req.body.tags || [],
-        
-        // Gender
-        gender: req.body.gender || "",
-        
-        // Client Sections (FIXED)
-        clientSections: cleanClientSections,
-        
-        // Interview Rounds
-        interviewRounds: req.body.interviewRounds || [],
-        
-        // Attachments
-        attachments: validAttachments,
-        
-        // Update timestamp
-        updatedAt: new Date()
-      },
-      { new: true, runValidators: false }
+      id,
+      updateData,
+      { new: true }
     );
 
     if (!updated) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Candidate not found" 
-      });
+      return res.status(404).json({ success: false, message: "Candidate not found" });
     }
 
-    console.log("✅ Candidate updated successfully:", updated._id);
-    console.log(`✅ Client sections saved: ${updated.clientSections?.length || 0}`);
-    res.json(updated);
+    res.json({
+      success: true,
+      message: "Candidate updated successfully ✅",
+      data: updated
+    });
 
   } catch (err) {
     console.error("Update error:", err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({
+      success: false,
+      message: "Error updating candidate",
+      error: err.message
+    });
   }
 });
-
 // DELETE CANDIDATE
 app.delete("/api/delete-candidate/:id", async (req, res) => {
   try {
@@ -974,7 +932,7 @@ app.put("/api/form-fields/:id", async (req, res) => {
 
 // ================== SERVER ==================
 const PORT = process.env.PORT || 5001;
-
-app.listen(PORT, () => {
+ 
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
