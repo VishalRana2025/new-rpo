@@ -218,14 +218,28 @@ const AllCandidates = () => {
         return candidate.state || "";
       case "tags":
         return candidate.tags || [];
-      case "designation":
-        return candidate.clientSections?.length
-          ? candidate.clientSections[candidate.clientSections.length - 1].designation || ""
-          : "";
-      case "clientName":
-        return candidate.clientSections?.length
-          ? candidate.clientSections[candidate.clientSections.length - 1].clientName || ""
-          : "";
+     case "designation":
+  if (!candidate.clientSections?.length) return "";
+
+  const validDesignation = candidate.clientSections.filter(
+    cs => cs.designation && cs.designation.trim() !== ""
+  );
+
+  return validDesignation.length
+    ? validDesignation[validDesignation.length - 1].designation
+    : "";
+
+
+case "clientName":
+  if (!candidate.clientSections?.length) return "";
+
+  const validClient = candidate.clientSections.filter(
+    cs => cs.clientName && cs.clientName.trim() !== ""
+  );
+
+  return validClient.length
+    ? validClient[validClient.length - 1].clientName
+    : "";
       case "createdAt":
         return candidate.createdAt
           ? new Date(candidate.createdAt).toISOString().split("T")[0]
@@ -410,24 +424,50 @@ const AllCandidates = () => {
   };
 
   const handleEdit = (candidate) => {
-    setEditCandidate({
-      ...candidate,
-      status: candidate.status || "",
-      remark: candidate.remark || "",
-      tags: candidate.tags || []   
-    });
-    setInterviewRounds(candidate.interviewRounds || []);
-    setClientSections(
-      Array.isArray(candidate.clientSections)
-        ? candidate.clientSections.map(section => ({ ...section }))
-        : []
-    );
-    setNewFiles([]);
-    setActiveSection("candidate");
-    setRoundDropdown(false);
-    setShowEditPopup(true);
-  };
+  setEditCandidate({
+    ...candidate,
+    status: candidate.status || "",
+    candidateStatus: candidate.candidateStatus || "",
+    remark: candidate.remark || "",
+    tags: candidate.tags || []
+  });
 
+  setClientSections(
+    Array.isArray(candidate.clientSections) && candidate.clientSections.length > 0
+      ? candidate.clientSections.map(section => ({
+          clientName: section.clientName || "",
+          designation: section.designation || "",
+          clientLocation: section.clientLocation || "",
+          process: section.process || "",
+          processLOB: section.processLOB || "",
+          salary: section.salary || "",
+          hrRemark: section.hrRemark || "",
+          clientStatus: section.clientStatus || "",
+          _id: section._id
+        }))
+      : [
+          {
+            tempId: Date.now(),
+            clientName: "",
+            designation: "",
+            clientLocation: "",
+            process: "",
+            processLOB: "",
+            salary: "",
+            hrRemark: "",
+            clientStatus: ""
+          }
+        ]
+  );
+
+  // ⭐ ADD THIS LINE HERE
+  setActiveClientIndex(0);
+
+  setNewFiles([]);
+  setActiveSection("candidate");
+  setRoundDropdown(false);
+  setShowEditPopup(true);
+};
   const handleDelete = async (id, name) => {
     const confirmDelete = window.confirm(`Are you sure you want to delete ${name}?`);
     if (!confirmDelete) return;
@@ -513,7 +553,7 @@ const AllCandidates = () => {
         expectedCTC: safeCandidate.expectedCTC || "",
         noticePeriod: safeCandidate.noticePeriod || "",
         resume: safeCandidate.resume || "",
-        status: safeCandidate.status || "",
+       status: safeCandidate.status,
         remark: safeCandidate.remark || "",
         tags: safeCandidate.tags || [],
         attachments: allAttachments,
@@ -764,25 +804,18 @@ const AllCandidates = () => {
               <label className={`block text-sm font-medium mb-2 ${themeStyles.secondaryText}`}>
                 Candidate Status
               </label>
-              <select
-                value={editCandidate.status ?? ""}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setEditCandidate(prev => ({
-                    ...prev,
-                    status: val
-                  }));
-                }}
-                className={`${themeStyles.input} border rounded-lg p-2 w-full focus:ring-2 focus:ring-blue-500 outline-none`}
-              >
-                <option value="">Select Status</option>
-                <option value="Applied">Applied</option>
-                <option value="Screening">Screening</option>
-                <option value="Interview">Interview</option>
-                <option value="Selected">Selected</option>
-                <option value="Rejected">Rejected</option>
-                <option value="Hold">On Hold</option>
-              </select>
+<input
+  type="text"
+  value={
+    clientSections?.length > 0
+      ? clientSections
+          .filter(cs => cs.clientStatus && cs.clientStatus.trim() !== "")
+          .slice(-1)[0]?.clientStatus || ""
+      : ""
+  }
+  readOnly
+  className={`${themeStyles.input} border rounded-lg p-2 w-full bg-gray-200`}
+/>
             </div>
             <div className={`${themeStyles.card} rounded-lg p-5 border shadow-sm`}>
               <h4 className="text-sm font-semibold mb-4 flex items-center gap-2">👤 Basic Details</h4>
@@ -914,8 +947,9 @@ const AllCandidates = () => {
                   <label className={`block text-sm font-medium mb-1 ${themeStyles.secondaryText}`}>Status</label>
                   <select
                     value={editCandidate.status || ""}
-                    onChange={(e) => handleEditChange("status", e.target.value)}
-                    className={`${themeStyles.input} border rounded-lg p-2 w-full`}
+onChange={(e) => {
+  handleEditChange("status", e.target.value);
+}}                    className={`${themeStyles.input} border rounded-lg p-2 w-full`}
                   >
                     <option value="">Select Status</option>
                     <option value="Selected">Selected</option>
@@ -980,8 +1014,7 @@ const AllCandidates = () => {
           </div>
         );
       case "clientInterview":
-        const currentSection = clientSections[activeClientIndex];
-        
+    const currentSection = clientSections[activeClientIndex]; 
         if (!currentSection) {
           return (
             <div className="text-center py-12">
@@ -1001,24 +1034,23 @@ const AllCandidates = () => {
                   Client Status
                 </label>
                 <select
-                  value={currentSection.clientStatus || ""}
-                  onChange={(e) =>
-                    updateClientSectionField(
-                      currentSection._id || currentSection.tempId,
-                      "clientStatus",
-                      e.target.value
-                    )
-                  }
-                  className={`${themeStyles.input} border rounded-lg p-2 w-full focus:ring-2 focus:ring-blue-500 outline-none`}
-                >
-                  <option value="">Select Status</option>
-                  <option value="Submitted">Submitted</option>
-                  <option value="Shortlisted">Shortlisted</option>
-                  <option value="Interview Scheduled">Interview Scheduled</option>
-                  <option value="Selected">Selected</option>
-                  <option value="Rejected">Rejected</option>
-                  <option value="On Hold">On Hold</option>
-                </select>
+  value={currentSection.clientStatus || ""}
+  onChange={(e) =>
+    updateClientSectionField(
+      currentSection._id || currentSection.tempId,
+      "clientStatus",
+      e.target.value
+    )
+  }
+  className={`${themeStyles.input} border rounded-lg p-2 w-full`}
+>
+  <option value="">Select Status</option>
+  <option value="Offer Released">Offer Released</option>
+  <option value="Offer Pending">Offer Pending</option>
+  <option value="Joined">Joined</option>
+  <option value="No Show">No Show</option>
+ <option value="Rejected- Client">Rejected- Client</option>
+</select>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -1112,12 +1144,11 @@ const AllCandidates = () => {
                         className="fixed inset-0 z-[99998]"
                         onClick={() => setRoundDropdown(false)}
                       />
-                      <div className="absolute right-0 mt-2 w-40 bg-white dark:bg-gray-800 border rounded-lg shadow-lg z-[99999]">
-                        {[1, 2, 3, 4, 5].map((round) => (
+<div className="absolute right-0 mt-2 w-40 bg-gray-800 border border-gray-600 rounded-lg shadow-lg z-[99999] text-white">                        {[1, 2, 3, 4, 5].map((round) => (
                           <div
                             key={round}
                             onClick={() => selectRound(round)}
-                            className="px-4 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
+                            className="px-4 py-2 text-sm cursor-pointer hover:bg-gray-700 transition-all"
                           >
                             Round {round}
                           </div>
@@ -1451,15 +1482,19 @@ const AllCandidates = () => {
                     <td className="px-4 py-3">{c.gender ? <span className="capitalize">{c.gender === "male" ? "Male" : c.gender === "female" ? "Female" : c.gender}</span> : "—"}</td>
                     <td className="px-4 py-3">{c.city || "—"}</td>
                     <td className="px-4 py-3">{c.state || "—"}</td>
-                    <td className="px-4 py-3 text-xs">
-                      {c.clientSections && c.clientSections.length > 0
-                        ? (() => {
-                            const valid = c.clientSections.filter(cs => cs.designation);
-                            if (valid.length === 0) return "—";
-                            return valid[valid.length - 1].designation;
-                          })()
-                        : "—"}
-                    </td>
+                   <td className="px-4 py-3 text-xs">
+  {c.clientSections && c.clientSections.length > 0
+    ? (() => {
+        const valid = c.clientSections.filter(
+          cs => cs.designation && cs.designation.trim() !== ""
+        );
+
+        if (valid.length === 0) return "—";
+
+        return valid[valid.length - 1].designation;
+      })()
+    : "—"}
+</td>
                     <td className="px-4 py-3">
                       {c.attachments && c.attachments.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
