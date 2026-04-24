@@ -469,20 +469,21 @@ case "clientName":
   setShowEditPopup(true);
 };
   const handleDelete = async (id, name) => {
-    const confirmDelete = window.confirm(`Are you sure you want to delete ${name}?`);
-    if (!confirmDelete) return;
+  const confirmDelete = window.confirm(`Are you sure you want to delete ${name}?`);
+  if (!confirmDelete) return;
 
-    try {
-      await api.delete(`/delete-candidate/${id}`);
-      const updatedData = data.filter(c => c._id !== id);
-      setData(updatedData);
-      localStorage.setItem("candidates", JSON.stringify(updatedData));
-      alert("Candidate deleted successfully!");
-    } catch (err) {
-      console.error(err);
-      alert("Delete failed. Please try again.");
-    }
-  };
+  try {
+    await api.delete(`/delete-candidate/${id}`);
+
+    // ✅ IMPORTANT: reload from backend
+    await loadData();
+
+    alert("Candidate deleted successfully!");
+  } catch (err) {
+    console.error(err);
+    alert("Delete failed. Please try again.");
+  }
+};
 
   const fileToBase64 = (file) => {
     return new Promise((resolve, reject) => {
@@ -1768,9 +1769,10 @@ onChange={(e) => {
             </button>
             <div className="h-full overflow-y-auto">
               <CandidateFormPage
-                onSuccess={async () => {
-                  await loadData();
-                }}
+               onSuccess={async () => {
+  await loadData();
+  setShowAddPopup(false); // ✅ CLOSE POPUP
+}}
               />
             </div>
           </div>

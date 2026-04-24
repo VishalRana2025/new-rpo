@@ -1,76 +1,180 @@
 import React, { useEffect, useState } from "react";
 import api from "../api";
+import ActivityChart from "../components/ActivityChart";
+import ActivityPopup from "../components/ActivityPopup";
 
 const Home = () => {
-  const [chartData, setChartData] = useState([]);
+  // ✅ States for CREATE, UPDATE, DELETE
+  const [createdData, setCreatedData] = useState([]);
+  const [updatedData, setUpdatedData] = useState([]);
+  const [deleteData, setDeleteData] = useState([]);
   const [recentActivities, setRecentActivities] = useState([]);
   const [summaryStats, setSummaryStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [filterModule, setFilterModule] = useState("all");
   const [filterDays, setFilterDays] = useState(30);
+  
+  // Popup state
+  const [popupOpen, setPopupOpen] = useState(false);
+  const [popupData, setPopupData] = useState(null);
 
   useEffect(() => {
     loadDashboardData();
-  }, [filterModule, filterDays]);
+  }, [filterDays]);
+
+  // Format chart data helper function
+  const formatChartData = (data) => {
+    if (!data || Object.keys(data).length === 0) return [];
+    
+    return Object.keys(data)
+      .map((date) => {
+        const d = data[date] || {};
+        return {
+          date,
+          create: d.CREATE || 0,
+          update: d.UPDATE || 0,
+          delete: d.DELETE || 0,
+          createDetails: [],
+          updateDetails: [],
+          deleteDetails: []
+        };
+      })
+      .filter((item) => item && item.date)
+      .sort(
+        (a, b) =>
+          new Date(a.date.split("/").reverse().join("-")) -
+          new Date(b.date.split("/").reverse().join("-"))
+      );
+  };
 
   const loadDashboardData = async () => {
     setLoading(true);
     try {
-      // Load chart data - FIXED: Added /api/ prefix
-      const chartRes = await api.get(`/api/activity-stats?days=${filterDays}&module=${filterModule}`);
-      const formatted = Object.keys(chartRes.data).map(date => ({
-        date,
-        create: chartRes.data[date].CREATE,
-        update: chartRes.data[date].UPDATE,
-        delete: chartRes.data[date].DELETE
-      })).sort((a, b) => new Date(a.date.split("/").reverse().join("-")) - new Date(b.date.split("/").reverse().join("-")));
+      // Fetch chart data for CANDIDATE only
+      const candidateRes = await api.get(
+        `/activity-stats?days=${filterDays}&module=candidate`
+      );
+
+      // Format candidate data
+      let candidateFormatted = formatChartData(candidateRes.data);
+
+      // Fetch recent activities for details
+      const activitiesRes = await api.get("/recent-activities?limit=100");
+      const activities = activitiesRes.data || [];
       
-      setChartData(formatted);
+      // Populate details for CANDIDATE chart
+      candidateFormatted.forEach(day => {
+        const dayDate = new Date(day.date.split("/").reverse().join("-"));
+        const dayDateStr = dayDate.toISOString().split("T")[0];
+        
+        const dayActivities = activities
+          .filter(act => {
+            const actDate = new Date(act.createdAt).toISOString().split("T")[0];
+            return actDate === dayDateStr && act.module === "candidate";
+          })
+          .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+        
+        day.createDetails = dayActivities
+          .filter(act => act.action === "CREATE")
+          .map(act => ({
+            action: act.action,
+            module: act.module,
+            itemName: act.itemName,
+            user: act.userName || act.userId || "System",
+            time: act.createdAt
+          }));
+          
+        day.updateDetails = dayActivities
+          .filter(act => act.action === "UPDATE")
+          .map(act => ({
+            action: act.action,
+            module: act.module,
+            itemName: act.itemName,
+            user: act.userName || act.userId || "System",
+            time: act.createdAt
+          }));
+          
+        day.deleteDetails = dayActivities
+          .filter(act => act.action === "DELETE")
+          .map(act => ({
+            action: act.action,
+            module: act.module,
+            itemName: act.itemName,
+            user: act.userName || act.userId || "System",
+            time: act.createdAt
+          }));
+      });
 
-      // Load recent activities - FIXED: Added /api/ prefix
-      const activitiesRes = await api.get("/api/recent-activities?limit=15");
-      setRecentActivities(activitiesRes.data);
+      // ✅ SPLIT into CREATE only, UPDATE only, DELETE only
+      const createdOnly = candidateFormatted.map(item => ({
+        ...item,
+        update: 0,
+        delete: 0
+      }));
 
-      // Load summary stats - FIXED: Added /api/ prefix
-      const summaryRes = await api.get("/api/activity-summary");
-      setSummaryStats(summaryRes.data);
+      const updatedOnly = candidateFormatted.map(item => ({
+        ...item,
+        create: 0,
+        delete: 0
+      }));
+
+      const deletedOnly = candidateFormatted.map(item => ({
+        ...item,
+        create: 0,
+        update: 0
+      }));
+
+      // Set state for all three charts
+      setCreatedData(createdOnly);
+      setUpdatedData(updatedOnly);
+      setDeleteData(deletedOnly);
+      setRecentActivities(activities.slice(0, 15));
+
+      // Fetch summary stats
+      const summaryRes = await api.get("/activity-summary");
+      setSummaryStats(
+        summaryRes.data || {
+          total: { create: 0, update: 0, delete: 0 },
+          candidate: { create: 0, update: 0, delete: 0 },
+          requirement: { create: 0, update: 0, delete: 0 },
+        }
+      );
+
     } catch (err) {
-      console.error("Error loading dashboard data:", err);
+      console.error("❌ Error loading dashboard data:", err);
+      setCreatedData([]);
+      setUpdatedData([]);
+      setDeleteData([]);
+      setRecentActivities([]);
+      setSummaryStats({
+        total: { create: 0, update: 0, delete: 0 },
+        candidate: { create: 0, update: 0, delete: 0 },
+        requirement: { create: 0, update: 0, delete: 0 },
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const getActionBadge = (action) => {
-    switch (action) {
-      case "CREATE": return "bg-green-900/50 text-green-400 border border-green-700";
-      case "UPDATE": return "bg-blue-900/50 text-blue-400 border border-blue-700";
-      case "DELETE": return "bg-red-900/50 text-red-400 border border-red-700";
-      default: return "bg-gray-900/50 text-gray-400 border border-gray-700";
-    }
+  // Handle bar click from chart
+  const handleBarClick = (data) => {
+    console.log("Bar clicked:", data);
+    setPopupData(data);
+    setPopupOpen(true);
   };
 
-  const getModuleIcon = (module) => {
-    switch (module) {
-      case "candidate": return "👤";
-      case "requirement": return "📋";
-      default: return "📦";
-    }
+  // Close popup
+  const closePopup = () => {
+    setPopupOpen(false);
+    setPopupData(null);
   };
-
-  // Get max value for bar chart scaling
-  const maxValue = Math.max(
-    ...chartData.flatMap(d => [d.create, d.update, d.delete]),
-    1
-  );
 
   const totalActivities = summaryStats 
-    ? summaryStats.total.create + summaryStats.total.update + summaryStats.total.delete 
+    ? (summaryStats.total?.create || 0) + (summaryStats.total?.update || 0) + (summaryStats.total?.delete || 0)
     : 0;
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4" />
           <p className="text-gray-400">Loading dashboard...</p>
@@ -80,260 +184,214 @@ const Home = () => {
   }
 
   return (
-    <div className="min-h-screen bg-black">
-      <div className="max-w-[1600px] mx-auto px-6 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+      <div className="max-w-[1600px] mx-auto p-6">
+        
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-2xl font-semibold text-white">Dashboard</h1>
-          <p className="text-gray-400 mt-1">Activity overview & analytics</p>
+          <h1 className="text-3xl font-bold text-white tracking-tight">Candidate Dashboard</h1>
+          <p className="text-gray-400 mt-2">Real-time activity monitoring & analytics</p>
         </div>
 
         {/* Filter Bar */}
-        <div className="mb-6 flex flex-wrap gap-4">
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-400">Module:</label>
-            <select
-              value={filterModule}
-              onChange={(e) => setFilterModule(e.target.value)}
-              className="bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-1.5 text-sm"
+        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-4 mb-8 border border-gray-700">
+          <div className="flex flex-wrap gap-4 items-center">
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-400">Time Range:</label>
+              <select
+                value={filterDays}
+                onChange={(e) => setFilterDays(parseInt(e.target.value))}
+                className="bg-gray-900 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              >
+                <option value="1">Last 1 day</option>
+                <option value="7">Last 7 days</option>
+                <option value="15">Last 15 days</option>
+                <option value="30">Last 30 days</option>
+                <option value="60">Last 60 days</option>
+                <option value="90">Last 90 days</option>
+              </select>
+            </div>
+            
+            <button
+              onClick={loadDashboardData}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm transition-all flex items-center gap-2 ml-auto"
             >
-              <option value="all">All</option>
-              <option value="candidate">Candidates</option>
-              <option value="requirement">Requirements</option>
-            </select>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Refresh
+            </button>
           </div>
-          
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-400">Days:</label>
-            <select
-              value={filterDays}
-              onChange={(e) => setFilterDays(parseInt(e.target.value))}
-              className="bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-1.5 text-sm"
-            >
-              <option value="7">Last 7 days</option>
-              <option value="15">Last 15 days</option>
-              <option value="30">Last 30 days</option>
-              <option value="60">Last 60 days</option>
-              <option value="90">Last 90 days</option>
-            </select>
-          </div>
-          
-          <button
-            onClick={loadDashboardData}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-sm transition-all"
-          >
-            Refresh
-          </button>
         </div>
 
-        {/* Stats Cards */}
-        {summaryStats && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-            <div className="bg-gray-900 rounded-lg p-5 border border-gray-800">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-400 text-sm">Total Activities</p>
-                  <p className="text-3xl font-bold text-white mt-1">{totalActivities}</p>
-                </div>
-                <div className="text-4xl">📊</div>
+        {/* TOP CARDS - 4 Summary Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {/* Total Activities Card */}
+          <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700 hover:border-gray-600 transition-all group">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-gray-400 text-sm font-medium">Total Activities</p>
+              <div className="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center group-hover:bg-blue-500/20 transition-all">
+                <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
               </div>
             </div>
-            
-            <div className="bg-gray-900 rounded-lg p-5 border border-gray-800">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-400 text-sm">Created</p>
-                  <p className="text-3xl font-bold text-green-400 mt-1">{summaryStats.total.create}</p>
-                </div>
-                <div className="text-4xl">➕</div>
-              </div>
-            </div>
-            
-            <div className="bg-gray-900 rounded-lg p-5 border border-gray-800">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-400 text-sm">Updated</p>
-                  <p className="text-3xl font-bold text-blue-400 mt-1">{summaryStats.total.update}</p>
-                </div>
-                <div className="text-4xl">✏️</div>
-              </div>
-            </div>
-            
-            <div className="bg-gray-900 rounded-lg p-5 border border-gray-800">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-gray-400 text-sm">Deleted</p>
-                  <p className="text-3xl font-bold text-red-400 mt-1">{summaryStats.total.delete}</p>
-                </div>
-                <div className="text-4xl">🗑️</div>
-              </div>
-            </div>
+            <h2 className="text-3xl font-bold text-white">{totalActivities}</h2>
+            <p className="text-green-400 text-sm mt-2">↑ +12% from last month</p>
           </div>
-        )}
 
-        {/* CSS Bar Chart */}
-        <div className="bg-gray-900 rounded-lg p-5 border border-gray-800 mb-8">
-          <h3 className="text-white font-semibold mb-4">Activity Timeline</h3>
-          {chartData.length > 0 ? (
-            <div className="overflow-x-auto">
-              <div className="min-w-[600px]">
-                {chartData.map((item, idx) => (
-                  <div key={idx} className="mb-4">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm text-gray-400">{item.date}</span>
-                    </div>
-                    <div className="space-y-2">
-                      {/* Create bar */}
-                      <div className="flex items-center gap-3">
-                        <div className="w-16 text-xs text-green-400">Create</div>
-                        <div className="flex-1 h-6 bg-gray-800 rounded overflow-hidden">
-                          <div 
-                            className="h-full bg-green-500 rounded transition-all duration-500 flex items-center justify-end px-2 text-xs text-white"
-                            style={{ width: `${(item.create / maxValue) * 100}%` }}
-                          >
-                            {item.create > 0 && item.create}
-                          </div>
-                        </div>
-                      </div>
-                      {/* Update bar */}
-                      <div className="flex items-center gap-3">
-                        <div className="w-16 text-xs text-blue-400">Update</div>
-                        <div className="flex-1 h-6 bg-gray-800 rounded overflow-hidden">
-                          <div 
-                            className="h-full bg-blue-500 rounded transition-all duration-500 flex items-center justify-end px-2 text-xs text-white"
-                            style={{ width: `${(item.update / maxValue) * 100}%` }}
-                          >
-                            {item.update > 0 && item.update}
-                          </div>
-                        </div>
-                      </div>
-                      {/* Delete bar */}
-                      <div className="flex items-center gap-3">
-                        <div className="w-16 text-xs text-red-400">Delete</div>
-                        <div className="flex-1 h-6 bg-gray-800 rounded overflow-hidden">
-                          <div 
-                            className="h-full bg-red-500 rounded transition-all duration-500 flex items-center justify-end px-2 text-xs text-white"
-                            style={{ width: `${(item.delete / maxValue) * 100}%` }}
-                          >
-                            {item.delete > 0 && item.delete}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+          {/* Created Card */}
+          <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700 hover:border-gray-600 transition-all group">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-gray-400 text-sm font-medium">Created</p>
+              <div className="w-10 h-10 bg-green-500/10 rounded-lg flex items-center justify-center group-hover:bg-green-500/20 transition-all">
+                <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </div>
+            </div>
+            <h2 className="text-3xl font-bold text-green-400">{summaryStats?.total?.create || 0}</h2>
+            <p className="text-gray-500 text-sm mt-2">New entries added</p>
+          </div>
+
+          {/* Updated Card */}
+          <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700 hover:border-gray-600 transition-all group">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-gray-400 text-sm font-medium">Updated</p>
+              <div className="w-10 h-10 bg-yellow-500/10 rounded-lg flex items-center justify-center group-hover:bg-yellow-500/20 transition-all">
+                <svg className="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </div>
+            </div>
+            <h2 className="text-3xl font-bold text-yellow-400">{summaryStats?.total?.update || 0}</h2>
+            <p className="text-gray-500 text-sm mt-2">Records modified</p>
+          </div>
+
+          {/* Deleted Card */}
+          <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700 hover:border-gray-600 transition-all group">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-gray-400 text-sm font-medium">Deleted</p>
+              <div className="w-10 h-10 bg-red-500/10 rounded-lg flex items-center justify-center group-hover:bg-red-500/20 transition-all">
+                <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </div>
+            </div>
+            <h2 className="text-3xl font-bold text-red-400">{summaryStats?.total?.delete || 0}</h2>
+            <p className="text-gray-500 text-sm mt-2">Records removed</p>
+          </div>
+        </div>
+
+        {/* ACTIVITY OVERVIEW - 3 COLUMN LAYOUT */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+
+          {/* LEFT CHART - ONLY CREATE ACTIVITIES */}
+          <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white font-semibold text-lg">
+                🟢 Created Candidates
+              </h3>
+              <span className="text-xs text-gray-500">
+                Last {filterDays} days
+              </span>
+            </div>
+            <div className="h-[380px] bg-gray-900/50 rounded-lg overflow-hidden">
+              {createdData.length > 0 ? (
+                <ActivityChart data={createdData} onBarClick={handleBarClick} />
+              ) : (
+                <div className="h-full flex items-center justify-center text-gray-400">
+                  <div className="text-center">
+                    <div className="text-4xl mb-2">📭</div>
+                    <p>No created data available</p>
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="text-center py-12 text-gray-500">
-              <div className="text-5xl mb-2">📭</div>
-              <p>No activity data available</p>
+          </div>
+
+          {/* MIDDLE CHART - ONLY UPDATE ACTIVITIES */}
+          <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white font-semibold text-lg">
+                🟡 Updated Candidates
+              </h3>
+              <span className="text-xs text-gray-500">
+                Last {filterDays} days
+              </span>
             </div>
-          )}
+            <div className="h-[380px] bg-gray-900/50 rounded-lg overflow-hidden">
+              {updatedData.length > 0 ? (
+                <ActivityChart data={updatedData} onBarClick={handleBarClick} />
+              ) : (
+                <div className="h-full flex items-center justify-center text-gray-400">
+                  <div className="text-center">
+                    <div className="text-4xl mb-2">📭</div>
+                    <p>No updated data available</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT CHART - ONLY DELETE ACTIVITIES */}
+          <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white font-semibold text-lg">
+                🔴 Deleted Candidates
+              </h3>
+              <span className="text-xs text-gray-500">
+                Last {filterDays} days
+              </span>
+            </div>
+            <div className="h-[380px] bg-gray-900/50 rounded-lg overflow-hidden">
+              {deleteData.length > 0 ? (
+                <ActivityChart data={deleteData} onBarClick={handleBarClick} />
+              ) : (
+                <div className="h-full flex items-center justify-center text-gray-400">
+                  <div className="text-center">
+                    <div className="text-4xl mb-2">📭</div>
+                    <p>No deleted data available</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
         </div>
 
-        {/* Simple Stats Cards Row 2 */}
+        {/* Candidate Stats */}
         {summaryStats && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <div className="bg-gray-900 rounded-lg p-5 border border-gray-800">
-              <h3 className="text-white font-semibold mb-3">Candidate Stats</h3>
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-green-400">Created</span>
-                  <span className="text-white font-bold">{summaryStats.candidate.create}</span>
+          <div className="grid grid-cols-1 gap-6 mb-8">
+            <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
+              <h3 className="text-white font-semibold mb-4">Candidate Activity Summary</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="flex justify-between items-center p-3 bg-gray-900/50 rounded-lg">
+                  <span className="text-green-400">✅ Created</span>
+                  <span className="text-2xl font-bold text-white">{summaryStats.candidate?.create || 0}</span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-blue-400">Updated</span>
-                  <span className="text-white font-bold">{summaryStats.candidate.update}</span>
+                <div className="flex justify-between items-center p-3 bg-gray-900/50 rounded-lg">
+                  <span className="text-yellow-400">✏️ Updated</span>
+                  <span className="text-2xl font-bold text-white">{summaryStats.candidate?.update || 0}</span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-red-400">Deleted</span>
-                  <span className="text-white font-bold">{summaryStats.candidate.delete}</span>
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-gray-900 rounded-lg p-5 border border-gray-800">
-              <h3 className="text-white font-semibold mb-3">Requirement Stats</h3>
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-green-400">Created</span>
-                  <span className="text-white font-bold">{summaryStats.requirement.create}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-blue-400">Updated</span>
-                  <span className="text-white font-bold">{summaryStats.requirement.update}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-red-400">Deleted</span>
-                  <span className="text-white font-bold">{summaryStats.requirement.delete}</span>
+                <div className="flex justify-between items-center p-3 bg-gray-900/50 rounded-lg">
+                  <span className="text-red-400">🗑️ Deleted</span>
+                  <span className="text-2xl font-bold text-white">{summaryStats.candidate?.delete || 0}</span>
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Recent Activities Table */}
-        <div className="bg-gray-900 rounded-lg border border-gray-800 overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-800">
-            <h3 className="text-white font-semibold">Recent Activities</h3>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-800/50">
-                <tr>
-                  <th className="px-5 py-3 text-left text-gray-400 font-medium">Action</th>
-                  <th className="px-5 py-3 text-left text-gray-400 font-medium">Module</th>
-                  <th className="px-5 py-3 text-left text-gray-400 font-medium">Item</th>
-                  <th className="px-5 py-3 text-left text-gray-400 font-medium">User</th>
-                  <th className="px-5 py-3 text-left text-gray-400 font-medium">Date & Time</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentActivities.length > 0 ? (
-                  recentActivities.map((activity, index) => (
-                    <tr key={activity._id || index} className="border-b border-gray-800 hover:bg-gray-800/30 transition-colors">
-                      <td className="px-5 py-3">
-                        <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getActionBadge(activity.action)}`}>
-                          {activity.action}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3">
-                        <span className="flex items-center gap-2 text-gray-300">
-                          <span>{getModuleIcon(activity.module)}</span>
-                          <span className="capitalize">{activity.module}</span>
-                        </span>
-                      </td>
-                      <td className="px-5 py-3 text-gray-300 max-w-xs truncate">
-                        {activity.itemName || activity.itemId || "-"}
-                      </td>
-                      <td className="px-5 py-3 text-gray-400 text-sm">
-                        {activity.userName || activity.userId || "System"}
-                      </td>
-                      <td className="px-5 py-3 text-gray-400 text-sm">
-                        {new Date(activity.createdAt).toLocaleString("en-IN", {
-                          day: "2-digit",
-                          month: "2-digit",
-                          year: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit"
-                        })}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="5" className="px-5 py-12 text-center text-gray-500">
-                      <div className="text-5xl mb-2">📭</div>
-                      <p>No recent activities</p>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+       
       </div>
+
+      {/* Activity Popup */}
+      <ActivityPopup 
+        isOpen={popupOpen}
+        onClose={closePopup}
+        data={popupData}
+      />
     </div>
   );
 };
