@@ -502,7 +502,9 @@ app.delete("/api/delete-client/:id", async (req, res) => {
   }
 });
 
-// ================== REQUIREMENT APIs ==================
+// ================== REQUIREMENT APIs (WITH ACTIVITY LOGS) ==================
+
+// ✅ CREATE REQUIREMENT with Activity Log
 app.post("/api/add-requirement", upload.array("files"), async (req, res) => {
   try {
     if (req.body.recruiterLocation && !req.body.clientLocation) {
@@ -542,6 +544,16 @@ app.post("/api/add-requirement", upload.array("files"), async (req, res) => {
 
     const saved = await newReq.save();
     console.log(`✅ Requirement saved with ID: ${saved._id}`);
+    
+    // ✅ Activity Log for CREATE Requirement
+    await ActivityLog.create({
+      action: "CREATE",
+      module: "requirement",
+      itemId: saved._id,
+      itemName: saved.clientName || saved.requirementName || "Requirement",
+      userName: req.body.createdByName || req.body.userName || "System"
+    });
+    
     console.log(`   Dynamic fields saved: ${dynamicFields.length}`);
     
     res.status(201).json(saved);
@@ -559,6 +571,7 @@ app.get("/api/requirements", async (req, res) => {
   }
 });
 
+// ✅ UPDATE REQUIREMENT with Activity Log
 app.put("/api/update-requirement/:id", async (req, res) => {
   try {
     if (req.body.recruiterLocation && !req.body.clientLocation) {
@@ -601,6 +614,15 @@ app.put("/api/update-requirement/:id", async (req, res) => {
       });
     }
 
+    // ✅ Activity Log for UPDATE Requirement
+    await ActivityLog.create({
+      action: "UPDATE",
+      module: "requirement",
+      itemId: updated._id,
+      itemName: updated.clientName || updated.requirementName || "Requirement",
+      userName: req.body.updatedByName || req.body.userName || "System"
+    });
+
     console.log(`✅ Requirement updated: ${req.params.id}`);
     res.json({ 
       success: true,
@@ -617,11 +639,32 @@ app.put("/api/update-requirement/:id", async (req, res) => {
   }
 });
 
+// ✅ DELETE REQUIREMENT with Activity Log
 app.delete("/api/delete-requirement/:id", async (req, res) => {
   try {
+    // First find the requirement to get its name
+    const reqData = await Requirement.findById(req.params.id);
+    
+    if (!reqData) {
+      return res.status(404).json({ message: "Requirement not found" });
+    }
+
+    // Delete the requirement
     await Requirement.findByIdAndDelete(req.params.id);
-    res.json({ message: "Deleted" });
+
+    // ✅ Activity Log for DELETE Requirement
+    await ActivityLog.create({
+      action: "DELETE",
+      module: "requirement",
+      itemId: req.params.id,
+      itemName: reqData.clientName || reqData.requirementName || "Requirement",
+      userName: req.body.deletedByName || req.body.userName || "System"
+    });
+
+    console.log(`✅ Requirement deleted: ${req.params.id}`);
+    res.json({ message: "Deleted successfully" });
   } catch (err) {
+    console.error("Error deleting requirement:", err);
     res.status(500).json({ message: "Error deleting requirement", error: err.message });
   }
 });
@@ -695,6 +738,105 @@ app.get("/api/candidates", async (req, res) => {
   }
 });
 
+// ================== ACTIVITY DASHBOARD APIs ==================
+
+// ✅ Chart data with module filter
+app.get("/api/activity-stats", async (req, res) => {
+  try {
+    const days = parseInt(req.query.days) || 30;
+    const module = req.query.module;
+    
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    let match = {
+      createdAt: { $gte: startDate }
+    };
+    
+    if (module && module !== "all") {
+      match.module = module;
+    }
+
+    const logs = await ActivityLog.find(match).sort({ createdAt: 1 });
+
+    const grouped = {};
+
+    logs.forEach(log => {
+      const date = new Date(log.createdAt).toLocaleDateString("en-GB");
+
+      if (!grouped[date]) {
+        grouped[date] = {
+          CREATE: 0,
+          UPDATE: 0,
+          DELETE: 0
+        };
+      }
+
+      grouped[date][log.action]++;
+    });
+
+    res.json(grouped);
+
+  } catch (err) {
+    console.error("Error in activity-stats:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ✅ Recent activities
+app.get("/api/recent-activities", async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100;
+    
+    const logs = await ActivityLog.find()
+      .sort({ createdAt: -1 })
+      .limit(limit);
+    
+    res.json(logs);
+  } catch (err) {
+    console.error("Error in recent-activities:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ✅ Summary stats
+app.get("/api/activity-summary", async (req, res) => {
+  try {
+    const data = await ActivityLog.aggregate([
+      {
+        $group: {
+          _id: { module: "$module", action: "$action" },
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const result = {
+      total: { create: 0, update: 0, delete: 0 },
+      candidate: { create: 0, update: 0, delete: 0 },
+      requirement: { create: 0, update: 0, delete: 0 }
+    };
+
+    data.forEach(item => {
+      const { module, action } = item._id;
+      const actionKey = action.toLowerCase();
+
+      result.total[actionKey] += item.count;
+      
+      if (module === "candidate") {
+        result.candidate[actionKey] += item.count;
+      } else if (module === "requirement") {
+        result.requirement[actionKey] += item.count;
+      }
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error("Error in activity-summary:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // ADD CANDIDATE - FIXED VERSION
 app.post("/api/add-candidate", async (req, res) => {
   try {
@@ -729,10 +871,6 @@ app.post("/api/add-candidate", async (req, res) => {
       }));
     
     console.log(`✅ Processing ${validAttachments.length} valid attachments`);
-    if (validAttachments.length > 0) {
-      console.log(`✅ First attachment has data: ${!!validAttachments[0]?.data}`);
-      console.log(`✅ First attachment name: ${validAttachments[0]?.name}`);
-    }
     
     const newCandidate = new Candidate({
       firstName: req.body.firstName || "",
@@ -754,19 +892,19 @@ app.post("/api/add-candidate", async (req, res) => {
       noticePeriod: req.body.noticePeriod || "",
       resume: req.body.resume || "",
       status: req.body.status || "",
-      candidateStatus: req.body.candidateStatus || "", // ✅ ADD THIS
+      candidateStatus: req.body.candidateStatus || "",
       remark: req.body.remark || "",
       tags: req.body.tags || [],
-    clientSections: (req.body.clientSections || []).map(cs => ({
-  clientName: cs.clientName || "",
-  designation: cs.designation || "",
-  clientLocation: cs.clientLocation || "",
-  process: cs.process || "",
-  processLOB: cs.processLOB || "",
-  salary: cs.salary || "",
-  hrRemark: cs.hrRemark || "",
-  clientStatus: cs.clientStatus || ""
-})),
+      clientSections: (req.body.clientSections || []).map(cs => ({
+        clientName: cs.clientName || "",
+        designation: cs.designation || "",
+        clientLocation: cs.clientLocation || "",
+        process: cs.process || "",
+        processLOB: cs.processLOB || "",
+        salary: cs.salary || "",
+        hrRemark: cs.hrRemark || "",
+        clientStatus: cs.clientStatus || ""
+      })),
       interviewRounds: req.body.interviewRounds || [],
       attachments: validAttachments,
       createdByName: req.body.createdByName || "",
@@ -776,6 +914,16 @@ app.post("/api/add-candidate", async (req, res) => {
     });
     
     const saved = await newCandidate.save();
+    
+    // ✅ Activity Log (CREATE)
+    await ActivityLog.create({
+      action: "CREATE",
+      module: "candidate",
+      itemId: saved._id,
+      itemName: saved.firstName + " " + saved.lastName,
+      userName: req.body.createdByName || "System"
+    });
+    
     console.log(`✅ Candidate saved successfully with ID: ${saved._id}`);
     console.log(`✅ Saved ${saved.attachments?.length || 0} attachments with data`);
     
@@ -787,7 +935,7 @@ app.post("/api/add-candidate", async (req, res) => {
   }
 });
 
-// UPDATE CANDIDATE - FULLY FIXED WITH SAFE FIELD MAPPING (NO ...req.body SPREAD)
+// UPDATE CANDIDATE - CLEANED VERSION
 app.put("/api/update-candidate/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -823,7 +971,7 @@ app.put("/api/update-candidate/:id", async (req, res) => {
       noticePeriod: req.body.noticePeriod || "",
       resume: req.body.resume || "",
       status: req.body.status || "",
-      candidateStatus: req.body.candidateStatus || "", // ✅ IMPORTANT
+      candidateStatus: req.body.candidateStatus || "",
       remark: req.body.remark || "",
       tags: req.body.tags || [],
       interviewRounds: req.body.interviewRounds || [],
@@ -842,6 +990,15 @@ app.put("/api/update-candidate/:id", async (req, res) => {
       return res.status(404).json({ success: false, message: "Candidate not found" });
     }
 
+    // ✅ Activity Log (UPDATE)
+    await ActivityLog.create({
+      action: "UPDATE",
+      module: "candidate",
+      itemId: id,
+      itemName: updated.firstName + " " + updated.lastName,
+      userName: req.body.updatedByName || "System"
+    });
+
     res.json({
       success: true,
       message: "Candidate updated successfully ✅",
@@ -857,14 +1014,24 @@ app.put("/api/update-candidate/:id", async (req, res) => {
     });
   }
 });
-// DELETE CANDIDATE
+
+// DELETE CANDIDATE - CLEANED VERSION
 app.delete("/api/delete-candidate/:id", async (req, res) => {
   try {
     const deleted = await Candidate.findByIdAndDelete(req.params.id);
-    
+
     if (!deleted) {
       return res.status(404).json({ success: false, message: "Candidate not found" });
     }
+
+    // ✅ Activity Log (DELETE)
+    await ActivityLog.create({
+      action: "DELETE",
+      module: "candidate",
+      itemId: req.params.id,
+      itemName: deleted.firstName + " " + deleted.lastName,
+      userName: req.body.deletedByName || "System"
+    });
     
     console.log(`✅ Candidate deleted: ${req.params.id}`);
     res.json({ success: true, message: "Candidate deleted successfully" });

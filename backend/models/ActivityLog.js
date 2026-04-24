@@ -5,6 +5,8 @@ const activitySchema = new mongoose.Schema({
   module: String,        // candidate
   itemId: String,
   itemName: String,
+    userName: String,   // ✅ ADD THIS LINE
+
   createdAt: { type: Date, default: Date.now }
 });
 
