@@ -731,14 +731,15 @@ app.get("/api/candidates/:id", async (req, res) => {
 // GET ALL CANDIDATES
 app.get("/api/candidates", async (req, res) => {
   try {
-    const data = await Candidate.find().sort({ createdAt: -1 });
+    const data = await Candidate.find()
+      .select("-attachments -resume") // 🔥 IMPORTANT (remove heavy data)
+      .sort({ createdAt: -1 });
+
     res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
-
-// ================== ACTIVITY DASHBOARD APIs ==================
+});// ================== ACTIVITY DASHBOARD APIs ==================
 
 // ✅ Chart data with module filter
 app.get("/api/activity-stats", async (req, res) => {

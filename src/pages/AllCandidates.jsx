@@ -17,10 +17,14 @@ const AllCandidates = () => {
   const [activeSection, setActiveSection] = useState("candidate");
   const [activeClientIndex, setActiveClientIndex] = useState(0);
   const [roundDropdown, setRoundDropdown] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    const savedTheme = localStorage.getItem("theme");
-    return savedTheme ? savedTheme === "dark" : false;
-  });
+const [isDarkMode, setIsDarkMode] = useState(() => {
+  const savedTheme = localStorage.getItem("theme");
+  return savedTheme ? savedTheme === "dark" : true; // ✅ default dark
+});
+  
+  // ================== PAGINATION STATE ==================
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50;
   
   // ================== FILTER SIDEBAR STATE ==================
   const [showFilterSidebar, setShowFilterSidebar] = useState(false);
@@ -124,12 +128,14 @@ const AllCandidates = () => {
     setActiveQuickFilter("");
     setQuickFilterValue("");
     setQuickFilterTagSearch("");
+    setCurrentPage(1); // Reset to first page when filters change
   };
 
   const clearQuickFilter = () => {
     setActiveQuickFilter("");
     setQuickFilterValue("");
     setQuickFilterTagSearch("");
+    setCurrentPage(1); // Reset to first page when quick filter changes
   };
 
   const loadData = async () => {
@@ -138,6 +144,7 @@ const AllCandidates = () => {
       const res = await api.get("/candidates");
       const candidates = res.data || [];
       setData(candidates);
+      setCurrentPage(1); // ✅ Reset to page 1 when loading new data
       localStorage.setItem("candidates", JSON.stringify(candidates));
     } catch (err) {
       console.error("Error loading candidates:", err);
@@ -360,6 +367,12 @@ case "clientName":
       return aVal < bVal ? 1 : -1;
     }
   });
+
+  // ================== PAGINATION LOGIC ==================
+  const indexOfLast = currentPage * itemsPerPage;
+  const indexOfFirst = indexOfLast - itemsPerPage;
+  const currentData = sortedData.slice(indexOfFirst, indexOfLast);
+  const totalPages = Math.ceil(sortedData.length / itemsPerPage);
 
   // ================== STATUS BADGE STYLES ==================
   const getStatusBadgeStyle = (status) => {
@@ -1438,7 +1451,7 @@ onChange={(e) => {
                   Created At {sortField === "createdAt" && (sortOrder === "asc" ? "↑" : "↓")}
                 </th>
                 <th className="px-4 py-3 text-center font-medium">Actions</th>
-              </tr>
+               </tr>
             </thead>
             <tbody>
               {isLoading ? (
@@ -1448,9 +1461,9 @@ onChange={(e) => {
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
                       <p className={themeStyles.secondaryText}>Loading candidates...</p>
                     </div>
-                   </td>
+                  </td>
                 </tr>
-              ) : sortedData.length === 0 ? (
+              ) : currentData.length === 0 ? (
                 <tr>
                   <td colSpan="17" className="text-center py-12">
                     <div className="text-5xl mb-2 text-gray-400">📭</div>
@@ -1458,12 +1471,12 @@ onChange={(e) => {
                     {canAddCandidate && !searchTerm && (
                       <button onClick={() => setShowAddPopup(true)} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">+ Add Candidate</button>
                     )}
-                   </td>
+                  </td>
                 </tr>
               ) : (
-                sortedData.map((c, index) => (
+                currentData.map((c, index) => (
                   <tr key={c._id} className={`border-b ${themeStyles.tableRow} ${index % 2 === 0 ? (isDarkMode ? "bg-gray-800/30" : "bg-gray-50/50") : ""}`}>
-                    <td className="px-4 py-3 font-medium">{index + 1}</td>
+                    <td className="px-4 py-3 font-medium">{indexOfFirst + index + 1}</td>
                     <td className="px-4 py-3">
                       {c.status ? (
                         <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeStyle(c.status)}`}>
@@ -1495,7 +1508,7 @@ onChange={(e) => {
         return valid[valid.length - 1].designation;
       })()
     : "—"}
-</td>
+                </td>
                     <td className="px-4 py-3">
                       {c.attachments && c.attachments.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
@@ -1550,9 +1563,42 @@ onChange={(e) => {
           </table>
         </div>
 
+        {/* ✅ PAGINATION BUTTONS */}
+        {!isLoading && totalPages > 1 && (
+          <div className="flex justify-between items-center mt-6 pt-4 border-t">
+            <button
+              onClick={() => setCurrentPage(prev => prev - 1)}
+              disabled={currentPage === 1}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                currentPage === 1
+                  ? "bg-gray-300 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400"
+                  : "bg-blue-600 text-white hover:bg-blue-700"
+              }`}
+            >
+              ⬅ Previous
+            </button>
+            
+            <span className={`text-sm ${themeStyles.secondaryText}`}>
+              Page {currentPage} of {totalPages}
+            </span>
+            
+            <button
+              onClick={() => setCurrentPage(prev => prev + 1)}
+              disabled={currentPage === totalPages}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                currentPage === totalPages
+                  ? "bg-gray-300 text-gray-500 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400"
+                  : "bg-blue-600 text-white hover:bg-blue-700"
+              }`}
+            >
+              Next ➡
+            </button>
+          </div>
+        )}
+
         {!isLoading && sortedData.length > 0 && (
           <div className={`mt-4 text-sm ${themeStyles.secondaryText} text-right`}>
-            Showing {sortedData.length} of {data.length} candidate(s)
+            Showing {indexOfFirst + 1} to {Math.min(indexOfLast, sortedData.length)} of {sortedData.length} candidate(s)
           </div>
         )}
       </div>
@@ -1771,7 +1817,7 @@ onChange={(e) => {
               <CandidateFormPage
                onSuccess={async () => {
   await loadData();
-  setShowAddPopup(false); // ✅ CLOSE POPUP
+  setShowAddPopup(false);
 }}
               />
             </div>
