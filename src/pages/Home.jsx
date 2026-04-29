@@ -54,7 +54,7 @@ const Home = () => {
     })).sort((a, b) => b.count - a.count).slice(0, 20);
   };
 
-  // ✅ FIXED: Format chart data with createDetails and updateDetails (NO EMPTY ARRAYS)
+  // ✅ FIXED: Format chart data with createDetails and updateDetails
   const formatChartData = (data, activities) => {
     if (!data || Object.keys(data).length === 0) return defaultChartData;
     
@@ -82,18 +82,15 @@ const Home = () => {
         const createActivities = dateActivities.filter(act => act.action === "CREATE");
         const updateActivities = dateActivities.filter(act => act.action === "UPDATE");
         
-        // ✅ IMPORTANT: Pass the grouped recruiter data to createDetails and updateDetails
         const createDetails = groupByUser(createActivities);
         const updateDetails = groupByUser(updateActivities);
-        
-        console.log(`📅 ${date}: CREATE: ${d.CREATE || 0} (${createDetails.length} recruiters), UPDATE: ${d.UPDATE || 0} (${updateDetails.length} recruiters)`);
         
         return {
           date,
           create: d.CREATE || 0,
           update: d.UPDATE || 0,
-          createDetails: createDetails, // ✅ Now has recruiter data!
-          updateDetails: updateDetails, // ✅ Now has recruiter data!
+          createDetails: createDetails,
+          updateDetails: updateDetails,
         };
       })
       .filter((item) => item && item.date)
@@ -106,20 +103,12 @@ const Home = () => {
     return formatted.length > 0 ? formatted : defaultChartData;
   };
 
-  // ✅ LOAD FROM CACHE INSTANTLY (WITH EXPIRY CHECK)
+  // ✅ LOAD FROM CACHE INSTANTLY (NO EXPIRY CHECK FOR DISPLAY)
   const loadFromCache = () => {
     try {
       const stored = localStorage.getItem("dashboardCache");
       if (stored) {
         const parsed = JSON.parse(stored);
-        
-        // ✅ Check if cache is expired (5 minutes)
-        const isExpired = Date.now() - parsed.timestamp > CACHE_EXPIRY;
-        
-        if (isExpired) {
-          console.log("⏳ Cache expired - will fetch fresh data");
-          return false;
-        }
         
         console.log("⚡ Loading from cache - UI visible instantly");
         console.log(`   Cache age: ${Math.round((Date.now() - parsed.timestamp) / 1000)} seconds`);
@@ -147,6 +136,11 @@ const Home = () => {
   const loadDashboardData = async () => {
     console.log("🔄 Loading fresh data from API (filterDays:", filterDays, ")");
     
+    // ✅ FIX ISSUE 1: Only show loader if NO cache exists
+    if (!localStorage.getItem("dashboardCache")) {
+      setLoading(true);
+    }
+    
     try {
       // Parallel API calls
       const [
@@ -157,7 +151,7 @@ const Home = () => {
         candidatesRes
       ] = await Promise.all([
         api.get(`/activity-stats?days=${filterDays}&module=candidate`),
-        api.get("/recent-activities?limit=500"), // Increased to get more activities for details
+        api.get("/recent-activities?limit=500"),
         api.get("/activity-summary"),
         api.get("/clients"),
         api.get("/candidates")
@@ -167,7 +161,7 @@ const Home = () => {
       const candidates = allCandidates.slice(0, 200);
       const activities = activitiesRes.data || [];
 
-      // ✅ FIXED: Pass activities to formatChartData
+      // ✅ Pass activities to formatChartData
       let candidateFormatted = formatChartData(candidateRes.data, activities);
       candidateFormatted = candidateFormatted.slice(0, 90);
       
@@ -181,8 +175,6 @@ const Home = () => {
         ...item,
         create: 0,
       }));
-
-      console.log("📊 Chart data with details - Sample first day:", candidateFormatted[0]);
 
       setCreatedData(createdOnly);
       setUpdatedData(updatedOnly);
@@ -321,34 +313,64 @@ const Home = () => {
 
     } catch (err) {
       console.error("❌ Error loading dashboard data:", err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // ✅ FIXED useEffect - ONLY call API if NO cache OR cache expired
+  // ✅ FIXED useEffect - LIKE REQUIREMENTS PAGE (with cleaner cache check)
   useEffect(() => {
-    // 1️⃣ Load from cache immediately (shows UI right away)
-    const hasValidCache = loadFromCache();
-
-    // 2️⃣ Only fetch fresh data if NO valid cache exists
-    if (!hasValidCache) {
-      console.log("📭 No valid cache - fetching from API");
-      loadDashboardData();
-    } else {
-      console.log("✅ Valid cache exists - NO API call needed");
+    // 1️⃣ Load cache instantly (ALWAYS show something immediately)
+    const cached = localStorage.getItem("dashboardCache");
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        setCreatedData(parsed.createdData || defaultChartData);
+        setUpdatedData(parsed.updatedData || defaultChartData);
+        setRecentActivities(parsed.recentActivities || []);
+        setSummaryStats(parsed.summaryStats || {
+          total: { create: 0, update: 0, delete: 0 },
+          candidate: { create: 0, update: 0, delete: 0 },
+          requirement: { create: 0, update: 0, delete: 0 },
+        });
+        setAllClients(parsed.allClients || []);
+        setOpenClientData(parsed.openClientData || []);
+        setClosedClientData(parsed.closedClientData || []);
+      } catch (e) {}
     }
+    
+    // 2️⃣ Background API (only if needed - cleaner version)
+    setTimeout(() => {
+      try {
+        const cachedNow = localStorage.getItem("dashboardCache");
+        if (!cachedNow) {
+          // No cache at all - fetch immediately
+          console.log("📭 No cache - fetching from API");
+          loadDashboardData();
+          return;
+        }
+        
+        const parsed = JSON.parse(cachedNow);
+        const isExpired = Date.now() - parsed.timestamp > CACHE_EXPIRY;
+        
+        if (isExpired) {
+          // Cache expired - refresh in background
+          console.log("⏳ Cache expired - refreshing in background");
+          loadDashboardData();
+        } else {
+          console.log("✅ Valid cache exists - NO API call needed");
+        }
+      } catch (e) {
+        // If any error parsing, fetch fresh data
+        console.log("⚠️ Cache parse error - fetching fresh data");
+        loadDashboardData();
+      }
+    }, 100); // Small delay to ensure UI renders first
   }, [filterDays]);
 
   // Handle bar click
   const handleBarClick = (data) => {
     if (!data) return;
-    
-    console.log("📊 Bar clicked:", {
-      actionType: data.actionType,
-      date: data.date,
-      count: data.count,
-      detailsCount: data.details?.length || 0,
-      details: data.details
-    });
     
     setPopupData({
       actionType: data.actionType,
@@ -436,7 +458,7 @@ const Home = () => {
                     ? "text-yellow-400 bg-yellow-500/10" 
                     : "text-green-400 bg-green-500/10"
                 }`}>
-                  {isExpired ? "⏳ Cache expired" : "⚡ Data from cache"}
+                  {isExpired ? "⏳ Cache expired (updating)" : "⚡ Data from cache"}
                 </span>
                 <span className="text-xs text-gray-500">
                   • Cached {getCacheAge()} ago

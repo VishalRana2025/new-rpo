@@ -9,6 +9,7 @@ import Admin from "./AdminDashboard";
 import CandidateDetail from "./CandidateDetail";
 import AllCandidates from "./AllCandidates";
 import { useLocation } from "react-router-dom";
+import RecruiterPayment from "./RecruiterPayment";
 
 const ClientOnboardingForm = ({ isAdminView = false }) => {
   const navigate = useNavigate();
@@ -198,7 +199,8 @@ const selectedClientName = queryParams.get("name");
   switch(page) {
    case "candidate":
   return userPermissions.newCandidate === true;
-
+case "recruiter-payment":
+  return isAdmin;
 case "all-candidates":
   return userPermissions.allCandidates === true;
     case "onboarding":
@@ -299,13 +301,12 @@ if (clientName) {
 }, [navigate, isAdminView, location.search]);
 const getAllowedPages = () => {
   if (isAdmin) {
-   return ["home","admin","onboarding","clients","requirements","all-requirements","candidate","all-candidates"];
+ return ["home","admin","onboarding","clients","requirements","all-requirements","candidate","all-candidates","recruiter-payment"];
   }
 
   if (!currentUser?.isApproved) return [];
 
-  const allowed = ["home"];
-
+const allowed = ["home"];
   if (userPermissions.newClient) allowed.push("onboarding");
   if (userPermissions.allClients) allowed.push("clients");
   if (userPermissions.newRequirement) allowed.push("requirements");
@@ -1068,7 +1069,6 @@ if (userPermissions.allCandidates) allowed.push("all-candidates");
   </li>
 )}
 
-          
 
           {(isAdmin || (currentUser?.isApproved && userPermissions.allClients)) && (
             <li
@@ -1102,6 +1102,19 @@ if (userPermissions.allCandidates) allowed.push("all-candidates");
     }`}
   >
     <span>📊</span>  Candidates
+  </li>
+)}
+
+{isAdmin && (
+  <li
+    onClick={() => handlePageChange("recruiter-payment")}
+    className={`px-6 py-3 cursor-pointer flex items-center gap-2 ${
+      activePage === "recruiter-payment"
+        ? "bg-blue-600"
+        : "hover:bg-blue-500"
+    }`}
+  >
+    <span>💰</span> Recruiter Payment
   </li>
 )}
         </ul>
@@ -1163,6 +1176,7 @@ if (userPermissions.allCandidates) allowed.push("all-candidates");
               <RequirementForm />
             </div>
           )}
+          {activePage === "recruiter-payment" && isAdmin && <RecruiterPayment />}
 
           {/* All Requirements Page */}
           {(activePage === "all-requirements") && (isAdmin || (currentUser?.isApproved && userPermissions.allRequirement)) && (
