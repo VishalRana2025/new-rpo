@@ -6,12 +6,8 @@ import api from "../api";
 import * as pdfjsLib from "pdfjs-dist";
 
 // ✅ Set worker source correctly
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  "pdfjs-dist/build/pdf.worker.min.mjs",
-  import.meta.url
-).href;
-
-// ✅ MOVED OUTSIDE - Good practice, reusable, not recreated on every call
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";// ✅ MOVED OUTSIDE - Good practice, reusable, not recreated on every call
 const detectSource = (text) => {
   if (!text) return "Resume Upload";
 
@@ -58,15 +54,27 @@ const CandidateFormPage = ({ onSuccess }) => {
 
   useEffect(() => {
     const userStr = localStorage.getItem("currentUser");
-    if (!userStr) { navigate("/login"); return; }
+    if (!userStr) { 
+      navigate("/login"); 
+      return; 
+    }
+
     try {
-      setCurrentUser(JSON.parse(userStr));
+      const user = JSON.parse(userStr);
+      setCurrentUser(user);
+
+      // ✅ AUTO FILL RECRUITER NAME
+      setCandidateForm((prev) => ({
+        ...prev,
+        recruiter: `${user.firstName} ${user.lastName}`
+      }));
+
     } catch {
       localStorage.removeItem("currentUser");
       navigate("/login");
     }
   }, [navigate]);
-
+  
   // Load edit data from localStorage
   useEffect(() => {
     const editData = localStorage.getItem("editCandidate");
@@ -81,24 +89,24 @@ const CandidateFormPage = ({ onSuccess }) => {
   const loadCandidateForEdit = (data) => {
     setEditingCandidate(data);
     setCandidateForm({
-  recruiter: data.recruiter || "",
-  sourcedFrom: sourceOptions.includes(data.sourcedFrom)
-    ? data.sourcedFrom
-    : data.sourcedFrom ? "Other" : "",
-  customSource: sourceOptions.includes(data.sourcedFrom)
-    ? ""
-    : data.sourcedFrom || "",
-  sourceDate: data.sourceDate || "",
-  firstName: data.firstName || "",
-  lastName: data.lastName || "",
-  phone: data.phone || "",
-  secondaryPhone: data.secondaryPhone || "",
-  email: data.email || "",
-  gender: data.gender || "",
-  city: data.city || "",
-  state: data.state || "",
-  country: data.country || "",
-});
+      recruiter: data.recruiter || "",
+      sourcedFrom: sourceOptions.includes(data.sourcedFrom)
+        ? data.sourcedFrom
+        : data.sourcedFrom ? "Other" : "",
+      customSource: sourceOptions.includes(data.sourcedFrom)
+        ? ""
+        : data.sourcedFrom || "",
+      sourceDate: data.sourceDate || "",
+      firstName: data.firstName || "",
+      lastName: data.lastName || "",
+      phone: data.phone || "",
+      secondaryPhone: data.secondaryPhone || "",
+      email: data.email || "",
+      gender: data.gender || "",
+      city: data.city || "",
+      state: data.state || "",
+      country: data.country || "",
+    });
     if (data.attachments && Array.isArray(data.attachments)) {
       setCandidateAttachments(data.attachments);
     } else if (data.fileUploads && Array.isArray(data.fileUploads)) {
@@ -131,7 +139,7 @@ const CandidateFormPage = ({ onSuccess }) => {
     }
   };
 
-  // ✅ IMPROVED: Extract candidate data from text with better parsing
+  // ✅ STEP 2 & 3: IMPROVED extractCandidateData with better parsing
   const extractCandidateData = (text) => {
     // Email extraction
     const emailMatch = text.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i);
@@ -140,57 +148,66 @@ const CandidateFormPage = ({ onSuccess }) => {
     const phoneMatch = text.match(/(?:\+?91[-.\s]?)?(?:(?:\d{3}[-.\s]?){2}\d{4}|\d{5}[-.\s]?\d{5}|\d{10})/);
     const cleanPhone = phoneMatch ? phoneMatch[0].replace(/\D/g, "").slice(-10) : "";
     
-    // ✅ IMPROVED: Smart Name extraction - ignore job titles
+    // ✅ STEP 2: NEW NAME LOGIC - improved detection
     let firstName = "";
     let lastName = "";
     
-    // Common job titles to ignore
-    const jobTitles = /(?:director|manager|engineer|developer|lead|architect|analyst|consultant|specialist|coordinator|supervisor|head|officer|executive|associate|senior|junior|trainee|intern)/i;
-    
-    // Try to find name from common patterns
-    const namePatterns = [
-      /(?:Name|Candidate|Applicant)[:\s]+([A-Z][a-z]+)\s+([A-Z][a-z]+)/i,
-      /([A-Z][a-z]+)\s+([A-Z][a-z]+)\s*(?:resume|cv|curriculum vitae)/i,
-    ];
-    
-    let nameMatch = null;
-    for (const pattern of namePatterns) {
-      nameMatch = text.match(pattern);
-      if (nameMatch) break;
-    }
-    
-    if (nameMatch && nameMatch[1] && nameMatch[2]) {
-      // Check if the matched name doesn't contain job titles
-      if (!jobTitles.test(nameMatch[1]) && !jobTitles.test(nameMatch[2])) {
-        firstName = nameMatch[1];
-        lastName = nameMatch[2];
+    // Strong name detection (first line with two capital words)
+    const nameMatch = text.match(/^([A-Z][a-z]+)\s+([A-Z][a-z]+)/m);
+    if (nameMatch) {
+      firstName = nameMatch[1];
+      lastName = nameMatch[2];
+    } else {
+      // Fallback to original logic
+      const jobTitles = /(?:director|manager|engineer|developer|lead|architect|analyst|consultant|specialist|coordinator|supervisor|head|officer|executive|associate|senior|junior|trainee|intern)/i;
+      
+      const namePatterns = [
+        /(?:Name|Candidate|Applicant)[:\s]+([A-Z][a-z]+)\s+([A-Z][a-z]+)/i,
+        /([A-Z][a-z]+)\s+([A-Z][a-z]+)\s*(?:resume|cv|curriculum vitae)/i,
+      ];
+      
+      let nameMatch2 = null;
+      for (const pattern of namePatterns) {
+        nameMatch2 = text.match(pattern);
+        if (nameMatch2) break;
       }
-    }
-    
-    // If still not found, try to find two consecutive capitalized words
-    if (!firstName) {
-      const lines = text.split("\n").slice(0, 5); // only top 5 lines
-
-      for (let line of lines) {
-        const words = line.trim().split(" ");
-
-        if (words.length >= 2) {
-          const word1 = words[0];
-          const word2 = words[1];
-
-          if (
-            /^[A-Z][a-z]{2,}$/.test(word1) &&
-            /^[A-Z][a-z]{2,}$/.test(word2) &&
-            !jobTitles.test(word1) &&
-            !jobTitles.test(word2)
-          ) {
-            firstName = word1;
-            lastName = word2;
-            break;
+      
+      if (nameMatch2 && nameMatch2[1] && nameMatch2[2]) {
+        if (!jobTitles.test(nameMatch2[1]) && !jobTitles.test(nameMatch2[2])) {
+          firstName = nameMatch2[1];
+          lastName = nameMatch2[2];
+        }
+      }
+      
+      // If still not found, try top 5 lines
+      if (!firstName) {
+        const lines = text.split("\n").slice(0, 5);
+        for (let line of lines) {
+          const words = line.trim().split(" ");
+          if (words.length >= 2) {
+            const word1 = words[0];
+            const word2 = words[1];
+            if (
+              /^[A-Z][a-z]{2,}$/.test(word1) &&
+              /^[A-Z][a-z]{2,}$/.test(word2) &&
+              !jobTitles.test(word1) &&
+              !jobTitles.test(word2)
+            ) {
+              firstName = word1;
+              lastName = word2;
+              break;
+            }
           }
         }
       }
     }
+    
+    // ✅ STEP 3: Gender detection
+    const genderMatch = text.match(/\b(male|female)\b/i);
+    const gender = genderMatch ? genderMatch[1].toLowerCase() : "";
+    
+    // ✅ STEP 3: Country detection
+    const country = text.match(/India/i) ? "India" : "";
     
     // ✅ IMPROVED: City detection - Indian cities list
     const indianCities = [
@@ -213,7 +230,7 @@ const CandidateFormPage = ({ onSuccess }) => {
     if (!city) {
       const cityPatterns = [
         /(?:City|Location|Based)[:\s]+([A-Za-z\s]{2,30})(?:\n|,|\.)/i,
-        /([A-Z][a-z]+)\s*(?:,|-)\s*([A-Z]{2})/  // City, ST format
+        /([A-Z][a-z]+)\s*(?:,|-)\s*([A-Z]{2})/
       ];
       for (const pattern of cityPatterns) {
         const cityMatch = text.match(pattern);
@@ -252,6 +269,7 @@ const CandidateFormPage = ({ onSuccess }) => {
       state = cityToState[city];
     }
     
+    // ✅ STEP 3: Return object with gender and country
     return {
       email: emailMatch ? emailMatch[0] : "",
       phone: cleanPhone,
@@ -259,62 +277,66 @@ const CandidateFormPage = ({ onSuccess }) => {
       lastName: lastName,
       city: city,
       state: state,
+      gender: gender,
+      country: country,
     };
   };
 
-  // ✅ FINAL: API-based resume parsing with PROPER merge logic
+  // ✅ STEP 1 & 4: FIXED parseResumeFromAPI with PROPER merge logic
   const parseResumeFromAPI = async (file) => {
     try {
       setIsParsingPDF(true);
 
       const formData = new FormData();
       formData.append("file", file);
+let apiData = {}; // ✅ use let
 
-      let apiData = {};
+try {
+  const response = await fetch("https://bdats.eclipticinsight.com/api/parse-resume", {
+    method: "POST",
+    body: formData,
+  });
 
-      try {
-        const response = await fetch("https://bdats.eclipticinsight.com/parse-resume", {
-          method: "POST",
-          body: formData,
-        });
+  if (response.ok) {
+    apiData = await response.json(); // ✅ assign once
+    console.log("✅ API DATA:", apiData);
+  } else {
+    console.warn("⚠️ API failed:", response.status);
+  }
 
-        if (response.ok) {
-          apiData = await response.json();
-          console.log("✅ API DATA:", apiData);
-        } else {
-          console.warn("⚠️ API failed with status:", response.status);
-        }
-      } catch (apiError) {
-        console.warn("⚠️ API fetch error:", apiError.message);
-      }
+} catch (err) {
+  console.error("❌ API ERROR:", err);
+}
 
       // ✅ Step 2: Extract text from PDF for local parsing
-      const text = await extractTextFromPDF(file);
-      const localData = extractCandidateData(text);
-      console.log("📄 LOCAL DATA:", localData);
+     const text = await extractTextFromPDF(file);
+
+// 🔥 fallback from backend
+const finalText = text || apiData.rawText || "";
+
+const localData = extractCandidateData(finalText);
+      
+      // ✅ STEP 5: DEBUG LOGS
+      console.log("📄 PDF TEXT SAMPLE:", text.substring(0, 500));
+      console.log("🧠 LOCAL DATA:", localData);
+      console.log("🌐 API DATA:", apiData);
 
       const today = new Date().toISOString().split("T")[0];
 
-      // ✅ Step 3: PROPER MERGE LOGIC - preserves user input, prevents overwriting
+      // ✅ STEP 1 & 4: PROPER MERGE LOGIC with correct priority
       setCandidateForm((prev) => ({
         ...prev,
-
-        // Name fields - local first, then API, keep existing if both empty
+        // ✅ priority: LOCAL → USER EXISTING → API (prevents API empty values from overriding)
         firstName: localData.firstName || apiData.firstName || prev.firstName,
-        lastName: localData.lastName || apiData.lastName || prev.lastName,
-
-        // Contact fields
-        email: localData.email || apiData.email || prev.email,
-        phone: localData.phone || apiData.phone || prev.phone,
-
-        // Location fields
-        city: localData.city || apiData.city || prev.city,
-        state: localData.state || apiData.state || prev.state,
-        country: apiData.country || prev.country || "India",
-
-        // Recruiter fields with smart detection
+lastName: localData.lastName || apiData.lastName || prev.lastName,
+email: localData.email || apiData.email || prev.email,
+phone: localData.phone || apiData.phone || prev.phone,
+        city: localData.city || prev.city || apiData.city,
+        state: localData.state || prev.state || apiData.state,
+        country: localData.country || prev.country || apiData.country || "India",
+        gender: localData.gender || prev.gender || apiData.gender,
         recruiter: prev.recruiter || (currentUser ? `${currentUser.firstName} ${currentUser.lastName}` : ""),
-        sourcedFrom: prev.sourcedFrom || detectSource(text),
+        sourcedFrom: prev.sourcedFrom || detectSource(finalText),
         sourceDate: prev.sourceDate || apiData.sourceDate || today,
       }));
 
@@ -441,39 +463,97 @@ const CandidateFormPage = ({ onSuccess }) => {
     return "📎";
   };
 
-const handleInputChange = (e) => {
-  let { name, value } = e.target;
+  const handleInputChange = (e) => {
+    let { name, value } = e.target;
 
-  // ✅ PHONE VALIDATION (only digits + max 10)
-  if (name === "phone" || name === "secondaryPhone") {
-    value = value.replace(/\D/g, ""); // remove non-digits
+    // ✅ PHONE VALIDATION (only digits + max 10)
+    if (name === "phone" || name === "secondaryPhone") {
+      value = value.replace(/\D/g, ""); // remove non-digits
 
-    if (value.length > 10) {
-      alert("Phone number must be only 10 digits ❌");
-      return;
+      if (value.length > 10) {
+        alert("Phone number must be only 10 digits ❌");
+        return;
+      }
     }
-  }
 
-  setCandidateForm((prev) => ({
-    ...prev,
-    [name]: value,
-  }));
-};
+    setCandidateForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
 
   const validateForm = () => {
-    if (!candidateForm.firstName?.trim()) { alert("First Name is required."); return false; }
-    if (!candidateForm.lastName?.trim()) { alert("Last Name is required."); return false; }
-    if (!candidateForm.email?.trim()) { alert("Email is required."); return false; }
-    if (candidateForm.email && !/^\S+@\S+\.\S+$/.test(candidateForm.email)) {
-      alert("Please enter a valid email address."); return false;
+    // ✅ Required fields check
+    if (!candidateForm.recruiter?.trim()) {
+      alert("Recruiter is required ❌");
+      return false;
     }
-    if (!candidateForm.phone?.trim()) { alert("Phone is required."); return false; }
-    const totalSize = candidateAttachments.reduce((s, f) => s + (f.size || 0), 0);
-    if (totalSize > 10 * 1024 * 1024) { alert("Total attachments exceed 10 MB."); return false; }
+
+    if (!candidateForm.sourcedFrom?.trim()) {
+      alert("Source is required ❌");
+      return false;
+    }
+
+    if (candidateForm.sourcedFrom === "Other" && !candidateForm.customSource?.trim()) {
+      alert("Custom Source is required ❌");
+      return false;
+    }
+
+    if (!candidateForm.sourceDate) {
+      alert("Source Date is required ❌");
+      return false;
+    }
+
+    if (!candidateForm.firstName?.trim()) {
+      alert("First Name is required ❌");
+      return false;
+    }
+
+    if (!candidateForm.lastName?.trim()) {
+      alert("Last Name is required ❌");
+      return false;
+    }
+
+    if (!candidateForm.phone?.trim()) {
+      alert("Phone is required ❌");
+      return false;
+    }
+
     if (candidateForm.phone.length !== 10) {
-  alert("Phone number must be exactly 10 digits ❌");
-  return false;
-}
+      alert("Phone must be 10 digits ❌");
+      return false;
+    }
+
+    if (!candidateForm.email?.trim()) {
+      alert("Email is required ❌");
+      return false;
+    }
+
+    if (!/^\S+@\S+\.\S+$/.test(candidateForm.email)) {
+      alert("Invalid email ❌");
+      return false;
+    }
+
+    if (!candidateForm.gender) {
+      alert("Gender is required ❌");
+      return false;
+    }
+
+    if (!candidateForm.city?.trim()) {
+      alert("City is required ❌");
+      return false;
+    }
+
+    if (!candidateForm.state?.trim()) {
+      alert("State is required ❌");
+      return false;
+    }
+
+    if (!candidateForm.country?.trim()) {
+      alert("Country is required ❌");
+      return false;
+    }
+
     return true;
   };
 
@@ -484,33 +564,33 @@ const handleInputChange = (e) => {
       return;
     }
     // ✅ FETCH FROM BACKEND
-const res = await api.get("/candidates");
-const existingCandidates = res.data;
+    const res = await api.get("/candidates");
+    const existingCandidates = res.data;
 
-// ✅ CHECK EMAIL
-const duplicateEmail = existingCandidates.find(
-  (c) =>
-    c.email === candidateForm.email &&
-    c._id !== editingCandidate?._id
-);
+    // ✅ CHECK EMAIL
+    const duplicateEmail = existingCandidates.find(
+      (c) =>
+        c.email === candidateForm.email &&
+        c._id !== editingCandidate?._id
+    );
 
-// ✅ CHECK PHONE
-const duplicatePhone = existingCandidates.find(
-  (c) =>
-    c.phone === candidateForm.phone &&
-    c._id !== editingCandidate?._id
-);
+    // ✅ CHECK PHONE
+    const duplicatePhone = existingCandidates.find(
+      (c) =>
+        c.phone === candidateForm.phone &&
+        c._id !== editingCandidate?._id
+    );
 
-// ✅ SHOW ALERT
-if (duplicateEmail) {
-  alert("This email already exists ❌");
-  return;
-}
+    // ✅ SHOW ALERT
+    if (duplicateEmail) {
+      alert("This email already exists ❌");
+      return;
+    }
 
-if (duplicatePhone) {
-  alert("This phone number already exists ❌");
-  return;
-}
+    if (duplicatePhone) {
+      alert("This phone number already exists ❌");
+      return;
+    }
 
     setIsLoading(true);
 
@@ -526,10 +606,9 @@ if (duplicatePhone) {
 
       const payload = {
         recruiter: candidateForm.recruiter,
-       sourcedFrom:
-  candidateForm.sourcedFrom === "Other"
-    ? candidateForm.customSource
-    : candidateForm.sourcedFrom,
+        sourcedFrom: candidateForm.sourcedFrom === "Other"
+          ? candidateForm.customSource
+          : candidateForm.sourcedFrom,
         sourceDate: candidateForm.sourceDate,
         firstName: candidateForm.firstName,
         lastName: candidateForm.lastName,
@@ -552,18 +631,23 @@ if (duplicatePhone) {
       console.log("🔥 Sending payload with attachments:", attachmentsData.length);
 
       if (editingCandidate) {
-        await api.put(`/update-candidate/${editingCandidate._id}`, payload);
+        await api.put(`/update-candidate/${editingCandidate._id}`, {
+          ...payload,
+          updatedByName: `${currentUser.firstName} ${currentUser.lastName}`
+        });
         alert("✅ Candidate updated successfully!");
         navigate("/candidates");
       } else {
-      await api.post("/add-candidate", payload);
-
-alert("✅ Candidate added successfully!");
-
-// 🔥 CALL PARENT FUNCTION
-if (onSuccess) {
-  await onSuccess();
-}
+        await api.post("/add-candidate", {
+          ...payload,
+          createdByName: `${currentUser.firstName} ${currentUser.lastName}`
+        });
+        alert("✅ Candidate added successfully!");
+        
+        // 🔥 CALL PARENT FUNCTION
+        if (onSuccess) {
+          await onSuccess();
+        }
       }
 
     } catch (err) {
@@ -588,7 +672,7 @@ if (onSuccess) {
       city: "",
       state: "",
       country: "",
-          customSource: "", 
+      customSource: "", 
     });
     setCandidateAttachments([]); 
     setEditingCandidate(null);
@@ -601,18 +685,20 @@ if (onSuccess) {
     { value: "other", label: "Other" },
     { value: "prefer_not_to_say", label: "Prefer not to say" },
   ];
+  
   const sourceOptions = [
-  "LinkedIn",
-  "Naukri",
-  "Indeed",
-  "Monster",
-  "Referral",
-  "Company Website",
-  "Walk-in",
-  "Consultancy",
-  "Campus Placement",
-  "Other"
-];
+    "LinkedIn",
+    "Naukri",
+    "Naukri-Nvites",
+    "Indeed",
+    "Monster",
+    "Referral",
+    "Company Website",
+    "Walk-in",
+    "Consultancy",
+    "Campus Placement",
+    "Other"
+  ];
 
   const th = {
     background: isDarkMode ? "bg-gray-900" : "bg-gray-100",
@@ -675,7 +761,7 @@ if (onSuccess) {
                     cursor-pointer disabled:opacity-50"
                   />
                   <p className="text-xs text-blue-200 mt-2">
-                    {isParsingPDF ? "🤖 Parsing PDF and auto-filling form..." : "Upload PDF to auto-fill Name, Email, Phone, City, State, Recruiter, Source · Max 10 MB · PDF only"}
+                    {isParsingPDF ? "🤖 Parsing PDF and auto-filling form..." : "Upload PDF to auto-fill Name, Email, Phone, City, State, Gender, Country · Max 10 MB · PDF only"}
                   </p>
                 </div>
               </div>
@@ -739,117 +825,166 @@ if (onSuccess) {
             </div>
 
             <div className="space-y-6">
+
               {/* Recruiter Information */}
               <div className="border-b pb-2">
                 <h3 className="text-lg font-semibold flex items-center gap-2">📋 Recruiter Information</h3>
               </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
                 <div>
-                  <label className="block mb-2 font-medium">Recruiter</label>
+                  <label className="block mb-2 font-medium">
+                    Recruiter <span className="text-red-500">*</span>
+                  </label>
                   <input type="text" name="recruiter" value={candidateForm.recruiter} onChange={handleInputChange} className={`${th.input} border p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-500 outline-none`} placeholder="Recruiter name" />
                 </div>
-                <div>
-                  <label className="block mb-2 font-medium">Sourced From</label>
-<select
-  name="sourcedFrom"
-  value={candidateForm.sourcedFrom}
-  onChange={handleInputChange}
-  className={`${th.input} border p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-500 outline-none`}
->
-  <option value="">Select Source</option>
 
-  {sourceOptions.map((src, index) => (
-    <option key={index} value={src}>
-      {src}
-    </option>
-  ))}
-</select>{candidateForm.sourcedFrom === "Other" && (
-  <input
-  type="text"
-  name="customSource"
-  placeholder="Enter custom source"
-  value={candidateForm.customSource}
-  onChange={handleInputChange}
-  className={`${th.input} border p-3 w-full rounded-lg mt-2`}
-/>
-)}                </div>
                 <div>
-                  <label className="block mb-2 font-medium">Source Date</label>
+                  <label className="block mb-2 font-medium">
+                    Sourced From <span className="text-red-500">*</span>
+                  </label>
+
+                  <select
+                    name="sourcedFrom"
+                    value={candidateForm.sourcedFrom}
+                    onChange={handleInputChange}
+                    className={`${th.input} border p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-500 outline-none`}
+                  >
+                    <option value="">Select Source</option>
+                    {sourceOptions.map((src, index) => (
+                      <option key={index} value={src}>{src}</option>
+                    ))}
+                  </select>
+
+                  {candidateForm.sourcedFrom === "Other" && (
+                    <input
+                      type="text"
+                      name="customSource"
+                      placeholder="Enter custom source"
+                      value={candidateForm.customSource}
+                      onChange={handleInputChange}
+                      className={`${th.input} border p-3 w-full rounded-lg mt-2`}
+                    />
+                  )}
+                </div>
+
+                <div>
+                  <label className="block mb-2 font-medium">
+                    Source Date <span className="text-red-500">*</span>
+                  </label>
                   <input type="date" name="sourceDate" value={candidateForm.sourceDate} onChange={handleInputChange} className={`${th.input} border p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-500 outline-none`} />
                 </div>
+
               </div>
 
               {/* Personal Information */}
               <div className="border-b pb-2 mt-4">
                 <h3 className="text-lg font-semibold flex items-center gap-2">👤 Personal Information</h3>
               </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
                 <div>
-                  <label className="block mb-2 font-medium">First Name <span className="text-red-500">*</span></label>
+                  <label className="block mb-2 font-medium">
+                    First Name <span className="text-red-500">*</span>
+                  </label>
                   <input type="text" name="firstName" value={candidateForm.firstName} onChange={handleInputChange} className={`${th.input} border p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-500 outline-none`} placeholder="Enter first name" />
                 </div>
+
                 <div>
-                  <label className="block mb-2 font-medium">Last Name <span className="text-red-500">*</span></label>
+                  <label className="block mb-2 font-medium">
+                    Last Name <span className="text-red-500">*</span>
+                  </label>
                   <input type="text" name="lastName" value={candidateForm.lastName} onChange={handleInputChange} className={`${th.input} border p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-500 outline-none`} placeholder="Enter last name" />
                 </div>
+
                 <div>
-                  <label className="block mb-2 font-medium">Phone <span className="text-red-500">*</span></label>
-<input
-  type="tel"
-  name="phone"
-  value={candidateForm.phone}
-  maxLength="10"
-  onChange={handleInputChange}
-  className={`${th.input} border p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-500 outline-none`}
-  placeholder="Enter 10 digit phone number"
-/>                </div>
+                  <label className="block mb-2 font-medium">
+                    Phone <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    name="phone"
+                    value={candidateForm.phone}
+                    maxLength="10"
+                    onChange={handleInputChange}
+                    className={`${th.input} border p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-500 outline-none`}
+                    placeholder="Enter 10 digit phone number"
+                  />
+                </div>
+
                 <div>
-                  <label className="block mb-2 font-medium">Secondary Phone</label>
-<input
-  type="tel"
-  name="secondaryPhone"
-  value={candidateForm.secondaryPhone}
-  maxLength="10"
-  onChange={handleInputChange}
-  className={`${th.input} border p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-500 outline-none`}
-  placeholder="Enter 10 digit alternate number"
-/>                </div>
+                  <label className="block mb-2 font-medium">
+                    Secondary Phone
+                  </label>
+                  <input
+                    type="tel"
+                    name="secondaryPhone"
+                    value={candidateForm.secondaryPhone}
+                    maxLength="10"
+                    onChange={handleInputChange}
+                    className={`${th.input} border p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-500 outline-none`}
+                    placeholder="Enter 10 digit alternate number"
+                  />
+                </div>
+
                 <div>
-                  <label className="block mb-2 font-medium">Email <span className="text-red-500">*</span></label>
+                  <label className="block mb-2 font-medium">
+                    Email <span className="text-red-500">*</span>
+                  </label>
                   <input type="email" name="email" value={candidateForm.email} onChange={handleInputChange} className={`${th.input} border p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-500 outline-none`} placeholder="john.doe@example.com" />
                 </div>
+
                 <div>
-                  <label className="block mb-2 font-medium">Gender</label>
+                  <label className="block mb-2 font-medium">
+                    Gender <span className="text-red-500">*</span>
+                  </label>
                   <select name="gender" value={candidateForm.gender} onChange={handleInputChange} className={`${th.input} border p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-500 outline-none`}>
-                    {genderOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    {genderOptions.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
                   </select>
                 </div>
+
               </div>
 
               {/* Location Information */}
               <div className="border-b pb-2 mt-4">
                 <h3 className="text-lg font-semibold flex items-center gap-2">📍 Location Information</h3>
               </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
                 <div>
-                  <label className="block mb-2 font-medium">City</label>
+                  <label className="block mb-2 font-medium">
+                    City <span className="text-red-500">*</span>
+                  </label>
                   <input type="text" name="city" value={candidateForm.city} onChange={handleInputChange} className={`${th.input} border p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-500 outline-none`} placeholder="Enter city" />
                 </div>
+
                 <div>
-                  <label className="block mb-2 font-medium">State</label>
+                  <label className="block mb-2 font-medium">
+                    State <span className="text-red-500">*</span>
+                  </label>
                   <input type="text" name="state" value={candidateForm.state} onChange={handleInputChange} className={`${th.input} border p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-500 outline-none`} placeholder="Enter state" />
                 </div>
+
                 <div>
-                  <label className="block mb-2 font-medium">Country</label>
+                  <label className="block mb-2 font-medium">
+                    Country <span className="text-red-500">*</span>
+                  </label>
                   <input type="text" name="country" value={candidateForm.country} onChange={handleInputChange} className={`${th.input} border p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-500 outline-none`} placeholder="Enter country" />
                 </div>
+
               </div>
 
-              {/* Action Buttons */}
+              {/* Buttons */}
               <div className="flex gap-3 pt-4 border-t">
                 <button onClick={saveCandidate} disabled={isLoading || isParsingPDF} className={`px-6 py-3 rounded-lg text-white ${th.buttonSuccess} flex-1 font-medium disabled:opacity-60`}>
                   {isLoading ? "Saving…" : editingCandidate ? "Update Candidate" : "Save Candidate"}
                 </button>
+
                 <button onClick={resetForm} disabled={isLoading || isParsingPDF} className={`px-6 py-3 rounded-lg text-white ${th.buttonSecondary} font-medium disabled:opacity-60`}>
                   Reset Form
                 </button>

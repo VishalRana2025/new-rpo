@@ -882,10 +882,10 @@ clientLocation: "",
         </div>
       )}
 
-      <div className="container mx-auto px-4 py-8">
-        <div className="max-w-6xl mx-auto">
+<div className="w-full">
+  <div className="max-w-2xl mx-auto">
           <div className={`${themeStyles.card} p-6 rounded-lg shadow-lg`}>
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6">
               <div>
                 <h2 className="text-2xl font-bold">
                   {editingRequirement ? "Edit Requirement" : "Add New Requirement"}
@@ -898,7 +898,7 @@ clientLocation: "",
                 {isAdmin && !editingRequirement && (
                   <button
                     onClick={() => setShowFormManager(true)}
-                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors flex items-center gap-2"
+                    className="px-3 py-2 text-sm bg-purple-600  hover:bg-purple-700 text-white rounded-lg transition-colors flex items-center gap-2"
                   >
                     <span>⚙️</span> Form Management
                   </button>

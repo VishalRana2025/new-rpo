@@ -17,36 +17,58 @@ const app = express();
 
 // Custom CORS handler for OPTIONS preflight requests
 app.use(cors({
-  origin: function (origin, callback) {
-    const allowedOrigins = [
-      "https://ats.eclipticinsight.com",
-      "https://bdats.eclipticinsight.com",
-      "http://localhost:5173",
-      "http://localhost:5174",
-      "http://localhost:3000"
-    ];
-
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(null, true); // temporary allow all
-    }
-  },
-  credentials: true,
+  origin: [
+    "http://localhost:5173",
+    "https://bdats.eclipticinsight.com",
+    "https://ats.eclipticinsight.com"
+  ],
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true
 }));
 
+// ✅ VERY IMPORTANT (preflight fix)
 app.options("*", cors());
-app.use(express.json({ limit: "50mb" })); // Increased limit for base64 files
-app.use("/", resumeRoutes);
-
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true }));
+app.use("/api/resume", resumeRoutes);
 // ================== FILE UPLOAD ==================
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // Increased to 10MB
 });
+// ================== PARSE RESUME API ==================
+const pdfParse = require("pdf-parse");
 
+app.post("/api/parse-resume", upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    const data = await pdfParse(req.file.buffer);
+    const text = data.text;
+
+    console.log("📄 PDF TEXT:", text.substring(0, 500));
+
+    // ✅ Extract basic data
+    const emailMatch = text.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i);
+    const phoneMatch = text.match(/\d{10}/);
+    const nameMatch = text.match(/^([A-Z][a-z]+)\s+([A-Z][a-z]+)/m);
+
+    res.json({
+      firstName: nameMatch?.[1] || "",
+      lastName: nameMatch?.[2] || "",
+      email: emailMatch?.[0] || "",
+      phone: phoneMatch?.[0] || "",
+      rawText: text
+    });
+
+  } catch (err) {
+    console.error("❌ Parse error:", err);
+    res.status(500).json({ error: "Parsing failed" });
+  }
+});
 // ================== DB ==================
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("✅ MongoDB Connected"))
@@ -479,9 +501,16 @@ app.post("/api/add-client", async (req, res) => {
 
 app.get("/api/clients", async (req, res) => {
   try {
-    res.json(await Client.find().sort({ createdAt: -1 }));
+    const limit = parseInt(req.query.limit) || 100;
+
+    const data = await Client.find()
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    res.json(data);
   } catch (err) {
-    res.status(500).json({ message: "Error fetching clients", error: err.message });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -565,12 +594,18 @@ app.post("/api/add-requirement", upload.array("files"), async (req, res) => {
 
 app.get("/api/requirements", async (req, res) => {
   try {
-    res.json(await Requirement.find().sort({ createdAt: -1 }));
+    const limit = parseInt(req.query.limit) || 100;
+
+    const data = await Requirement.find()
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    res.json(data);
   } catch (err) {
-    res.status(500).json({ message: "Error fetching requirements", error: err.message });
+    res.status(500).json({ error: err.message });
   }
 });
-
 // ✅ UPDATE REQUIREMENT with Activity Log
 app.put("/api/update-requirement/:id", async (req, res) => {
   try {
@@ -731,9 +766,13 @@ app.get("/api/candidates/:id", async (req, res) => {
 // GET ALL CANDIDATES
 app.get("/api/candidates", async (req, res) => {
   try {
-    const data = await Candidate.find()
-      .select("-attachments -resume") // 🔥 IMPORTANT (remove heavy data)
-      .sort({ createdAt: -1 });
+const limit = parseInt(req.query.limit) || 100;
+
+const data = await Candidate.find()
+  .select("-resume -attachments.data")
+  .sort({ createdAt: -1 })
+  .limit(limit)
+    .lean(); // 🔥 IMPORTANT
 
     res.json(data);
   } catch (err) {
@@ -758,7 +797,10 @@ app.get("/api/activity-stats", async (req, res) => {
       match.module = module;
     }
 
-    const logs = await ActivityLog.find(match).sort({ createdAt: 1 });
+    const logs = await ActivityLog.find(match)
+  .sort({ createdAt: 1 })
+  .limit(500) // 🔥 VERY IMPORTANT
+  .lean();
 
     const grouped = {};
 
@@ -788,12 +830,13 @@ app.get("/api/activity-stats", async (req, res) => {
 app.get("/api/recent-activities", async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 100;
-    
+
     const logs = await ActivityLog.find()
-      .sort({ createdAt: -1 })
-      .limit(limit);
-    
+  .sort({ createdAt: -1 })
+  .limit(limit)
+  .lean(); // 🔥 ADD THIS
     res.json(logs);
+
   } catch (err) {
     console.error("Error in recent-activities:", err);
     res.status(500).json({ error: "Server error" });
@@ -993,12 +1036,20 @@ app.put("/api/update-candidate/:id", async (req, res) => {
 
     // ✅ Activity Log (UPDATE)
     await ActivityLog.create({
-      action: "UPDATE",
-      module: "candidate",
-      itemId: id,
-      itemName: updated.firstName + " " + updated.lastName,
-      userName: req.body.updatedByName || "System"
-    });
+  action: "UPDATE",
+  module: "candidate",
+  itemId: id,
+  itemName: updated.firstName + " " + updated.lastName,
+
+  userName: req.body.updatedByName, // ✅ real user only
+
+  // ✅ ADD THESE 2 LINES (VERY IMPORTANT)
+  status: updated.status,
+
+  clientName: updated.clientSections?.length
+    ? updated.clientSections[updated.clientSections.length - 1].clientName
+    : ""
+});
 
     res.json({
       success: true,
@@ -1019,25 +1070,13 @@ app.put("/api/update-candidate/:id", async (req, res) => {
 // DELETE CANDIDATE - CLEANED VERSION
 app.delete("/api/delete-candidate/:id", async (req, res) => {
   try {
-    const deleted = await Candidate.findByIdAndDelete(req.params.id);
+    const { id } = req.params; // ✅ ONLY ONE
 
-    if (!deleted) {
-      return res.status(404).json({ success: false, message: "Candidate not found" });
-    }
+    await Candidate.findByIdAndDelete(id);
 
-    // ✅ Activity Log (DELETE)
-    await ActivityLog.create({
-      action: "DELETE",
-      module: "candidate",
-      itemId: req.params.id,
-      itemName: deleted.firstName + " " + deleted.lastName,
-      userName: req.body.deletedByName || "System"
-    });
-    
-    console.log(`✅ Candidate deleted: ${req.params.id}`);
-    res.json({ success: true, message: "Candidate deleted successfully" });
+    res.json({ message: "Deleted successfully" });
   } catch (err) {
-    console.error("Delete error:", err);
+    console.log("Delete error:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -1098,9 +1137,65 @@ app.put("/api/form-fields/:id", async (req, res) => {
   }
 });
 
-// ================== SERVER ==================
+// ================== BACKEND CACHE ==================
+let dashboardCache = null;
+let lastFetchTime = 0;
+
+app.get("/api/dashboard-fast", async (req, res) => {
+  try {
+    const CACHE_TIME = 5 * 60 * 1000; // 5 minutes
+
+    // ✅ 1. USE CACHE (NO DB CALL)
+    if (dashboardCache && Date.now() - lastFetchTime < CACHE_TIME) {
+      console.log("⚡ Backend cache hit");
+      return res.json(dashboardCache);
+    }
+
+    console.log("🔄 Fetching from DB");
+
+    // ✅ 2. FETCH FROM DB
+    const [candidates, activities, summary, clients] = await Promise.all([
+      Candidate.find()
+  .select("-resume -attachments.data")
+  .limit(100)
+  .lean(),
+      ActivityLog.find().limit(100).lean(),
+      ActivityLog.aggregate([
+        { $group: { _id: "$action", count: { $sum: 1 } } }
+      ]),
+      Client.find().limit(100).lean()
+    ]);
+
+    const data = { candidates, activities, summary, clients };
+
+    // ✅ 3. SAVE CACHE
+    dashboardCache = data;
+    lastFetchTime = Date.now();
+
+    res.json(data);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Dashboard error" });
+  }
+});
+/// ================== SERVER ==================
+
+app.use((err, req, res, next) => {
+  if (err.message === "Request aborted") {
+    console.warn("⚠️ Upload request aborted by client");
+    return res.status(499).json({ error: "Upload cancelled" });
+  }
+
+  if (err.code === "LIMIT_FILE_SIZE") {
+    return res.status(400).json({ error: "File too large" });
+  }
+
+  next(err);
+});
+
 const PORT = process.env.PORT || 5001;
- 
+
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });

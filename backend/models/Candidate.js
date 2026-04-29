@@ -10,28 +10,26 @@ const attachmentSchema = new mongoose.Schema({
   data: { type: String, default: null }
 });
 
-// ✅ Client Section Schema (FULLY FIXED)
+// ✅ Client Section Schema
 const clientSectionSchema = new mongoose.Schema({
   clientName: { type: String, default: "" },
   designation: { type: String, default: "" },
-
   clientLocation: { type: String, default: "" },
   process: { type: String, default: "" },
   processLOB: { type: String, default: "" },
   salary: { type: String, default: "" },
   hrRemark: { type: String, default: "" },
 
-  // ✅ IMPORTANT FIX
+  // ✅ IMPORTANT
   clientStatus: { type: String, default: "" },
 
-  // optional
   status: { type: String, default: "" },
   remark: { type: String, default: "" }
 });
 
 // 👤 Candidate Schema
 const candidateSchema = new mongoose.Schema({
-  // ✅ Basic Details
+  // Basic
   firstName: { type: String, required: true },
   lastName: { type: String, required: true },
   email: { type: String, required: true },
@@ -47,7 +45,7 @@ const candidateSchema = new mongoose.Schema({
   state: { type: String, default: "" },
   country: { type: String, default: "" },
 
-  // ✅ Professional Details
+  // Professional
   qualification: { type: String, default: "" },
   totalExperience: { type: String, default: "" },
   currentCTC: { type: String, default: "" },
@@ -55,7 +53,7 @@ const candidateSchema = new mongoose.Schema({
   noticePeriod: { type: String, default: "" },
   resume: { type: String, default: "" },
 
-  // ✅ Recruiter Status
+  // Recruiter Status
   status: { type: String, default: "" },
   remark: { type: String, default: "" },
 
@@ -64,36 +62,41 @@ const candidateSchema = new mongoose.Schema({
     default: []
   },
 
-  // ✅ Client Sections
+  // Client Sections
   clientSections: {
     type: [clientSectionSchema],
     default: []
   },
 
-  // ✅ Interview Rounds
+  // Interview Rounds
   interviewRounds: {
     type: Array,
     default: []
   },
 
-  // 📎 Attachments
+  // Attachments
   attachments: {
     type: [attachmentSchema],
     default: []
   },
 
-  // 👤 Created Info
+  // Created Info
   createdBy: { type: String, default: "" },
   createdByName: { type: String, default: "" },
   createdByEmail: { type: String, default: "" },
   createdByEmployeeId: { type: String, default: "" },
 
-  // 🕒 Timestamps
+  // Time
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
 
-// ⚠️ Prevent model overwrite
+// 🔥🔥🔥 MOST IMPORTANT (PERFORMANCE BOOST)
+candidateSchema.index({ createdAt: -1 });
+
+// 🔥 OPTIONAL (ADVANCED BOOST)
+candidateSchema.index({ createdAt: -1, status: 1 });
+
 module.exports =
   mongoose.models.Candidate ||
   mongoose.model("Candidate", candidateSchema);

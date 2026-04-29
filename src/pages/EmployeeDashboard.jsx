@@ -8,9 +8,14 @@ import AllRequirements from "./AllRequirements";
 import Admin from "./AdminDashboard";
 import CandidateDetail from "./CandidateDetail";
 import AllCandidates from "./AllCandidates";
+import { useLocation } from "react-router-dom";
 
 const ClientOnboardingForm = ({ isAdminView = false }) => {
   const navigate = useNavigate();
+  const location = useLocation();
+
+const queryParams = new URLSearchParams(location.search);
+const selectedClientName = queryParams.get("name");
   const [currentUser, setCurrentUser] = useState(null);
   const [userPermissions, setUserPermissions] = useState({
   newClient: false,
@@ -210,7 +215,12 @@ case "all-candidates":
 };
  useEffect(() => {
   const userStr = localStorage.getItem("currentUser");
+const queryParams = new URLSearchParams(location.search);
+const clientName = queryParams.get("name");
 
+if (clientName) {
+  setActivePage("clients");
+}
   if (!userStr && !isAdminView) {
     navigate("/login");
     return;
@@ -286,7 +296,7 @@ case "all-candidates":
       navigate("/login");
     }
   }
-}, [navigate, isAdminView]);
+}, [navigate, isAdminView, location.search]);
 const getAllowedPages = () => {
   if (isAdmin) {
    return ["home","admin","onboarding","clients","requirements","all-requirements","candidate","all-candidates"];
@@ -900,15 +910,23 @@ if (userPermissions.allCandidates) allowed.push("all-candidates");
     return client[key] !== undefined && client[key] !== null && client[key] !== "" ? client[key] : "-";
   };
 
-  const filteredClients = clients.filter(
-    (client) =>
-      client.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      client.clientPocName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      client.ourPocName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      client.clientPocEmail?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (client.clientVendorEmail || client.clientVanderEmail)?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      client.clientPocMobile?.includes(searchTerm)
+  const filteredClients = clients.filter((client) => {
+
+  // 👉 If coming from Home (clicked client)
+  if (selectedClientName) {
+    return client.clientName === selectedClientName;
+  }
+
+  // 👉 Normal search
+  return (
+    client.clientName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    client.clientPocName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    client.ourPocName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    client.clientPocEmail?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (client.clientVendorEmail || client.clientVanderEmail)?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    client.clientPocMobile?.includes(searchTerm)
   );
+});
 
   const formatDate = (dateString) => {
     if (!dateString) return "N/A";
@@ -1119,12 +1137,7 @@ if (userPermissions.allCandidates) allowed.push("all-candidates");
               <span>Welcome, {currentUser?.firstName} {currentUser?.lastName}</span>
               <span className="text-xs text-yellow-300 ml-2">({currentUser?.email})</span>
             </div>
-            <button
-              onClick={toggleTheme}
-              className="bg-gray-700 px-3 py-1 rounded hover:bg-gray-600 transition-colors text-sm"
-            >
-              {isDarkMode ? "☀️" : "🌙"}
-            </button>
+            
             {!isAdminView && (
               <button
                 onClick={logout}

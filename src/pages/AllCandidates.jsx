@@ -17,11 +17,19 @@ const AllCandidates = () => {
   const [activeSection, setActiveSection] = useState("candidate");
   const [activeClientIndex, setActiveClientIndex] = useState(0);
   const [roundDropdown, setRoundDropdown] = useState(false);
-const [isDarkMode, setIsDarkMode] = useState(() => {
-  const savedTheme = localStorage.getItem("theme");
-  return savedTheme ? savedTheme === "dark" : true; // ✅ default dark
-});
-  
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const savedTheme = localStorage.getItem("theme");
+    return savedTheme ? savedTheme === "dark" : true;
+  });
+  const getFullCandidate = async (id) => {
+  try {
+    const res = await api.get(`/candidates/${id}`);
+    return res.data;
+  } catch (err) {
+    console.error("Error fetching full candidate:", err);
+    return null;
+  }
+};
   // ================== PAGINATION STATE ==================
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
@@ -72,12 +80,10 @@ const [isDarkMode, setIsDarkMode] = useState(() => {
   ];  
   const statusOptions = getUniqueValues("status");
   
-  // Get unique tags for quick filter
   const tagOptionsForFilter = [
     ...new Set(data.flatMap(c => c.tags || []).filter(Boolean))
   ];
 
-  // Filtered tags for search
   const filteredQuickTags = tagOptionsForFilter.filter(tag =>
     tag.toLowerCase().includes(quickFilterTagSearch.toLowerCase())
   );
@@ -93,8 +99,7 @@ const [isDarkMode, setIsDarkMode] = useState(() => {
   }, []);
 
   const role = currentUser?.role?.toLowerCase() || "";
-  const canDeleteCandidate =
-  ["admin", "superadmin", "super_admin"].includes(role);
+  const canDeleteCandidate = ["admin", "superadmin", "super_admin"].includes(role);
 
   const canAddCandidate =
     ["admin", "superadmin", "super_admin", "manager"].includes(role) ||
@@ -128,14 +133,14 @@ const [isDarkMode, setIsDarkMode] = useState(() => {
     setActiveQuickFilter("");
     setQuickFilterValue("");
     setQuickFilterTagSearch("");
-    setCurrentPage(1); // Reset to first page when filters change
+    setCurrentPage(1);
   };
 
   const clearQuickFilter = () => {
     setActiveQuickFilter("");
     setQuickFilterValue("");
     setQuickFilterTagSearch("");
-    setCurrentPage(1); // Reset to first page when quick filter changes
+    setCurrentPage(1);
   };
 
   const loadData = async () => {
@@ -144,14 +149,12 @@ const [isDarkMode, setIsDarkMode] = useState(() => {
       const res = await api.get("/candidates");
       const candidates = res.data || [];
       setData(candidates);
-      setCurrentPage(1); // ✅ Reset to page 1 when loading new data
-      localStorage.setItem("candidates", JSON.stringify(candidates));
+      setCurrentPage(1);
+   
     } catch (err) {
       console.error("Error loading candidates:", err);
-      const stored = localStorage.getItem("candidates");
-      if (stored) {
-        setData(JSON.parse(stored));
-      }
+     console.error("Error loading candidates:", err);
+alert("Failed to load data from server");
     } finally {
       setIsLoading(false);
     }
@@ -228,31 +231,25 @@ const [isDarkMode, setIsDarkMode] = useState(() => {
      case "designation":
   if (!candidate.clientSections?.length) return "";
 
-  const validDesignation = candidate.clientSections.filter(
-    cs => cs.designation && cs.designation.trim() !== ""
-  );
+  const lastValidDesignation = [...candidate.clientSections]
+    .reverse()
+    .find(cs => cs.designation && cs.designation.trim() !== "");
 
-  return validDesignation.length
-    ? validDesignation[validDesignation.length - 1].designation
-    : "";
-
-
-case "clientName":
+  return lastValidDesignation?.designation || "";
+     case "clientName":
   if (!candidate.clientSections?.length) return "";
 
-  const validClient = candidate.clientSections.filter(
-    cs => cs.clientName && cs.clientName.trim() !== ""
-  );
+  const lastValidClient = [...candidate.clientSections]
+    .reverse()
+    .find(cs => cs.clientName && cs.clientName.trim() !== "");
 
-  return validClient.length
-    ? validClient[validClient.length - 1].clientName
-    : "";
+  return lastValidClient?.clientName || "";
       case "createdAt":
         return candidate.createdAt
           ? new Date(candidate.createdAt).toISOString().split("T")[0]
           : "";
-      case "status":
-        return candidate.status || "";
+case "status":
+  return getLatestClientStatus(candidate) ;
       default:
         return "";
     }
@@ -262,7 +259,6 @@ case "clientName":
   const applyFilters = (candidatesData) => {
     let filtered = [...candidatesData];
     
-    // Apply Quick Filter FIRST (independent)
     if (activeQuickFilter && quickFilterValue) {
       filtered = filtered.filter((candidate) => {
         if (activeQuickFilter === "tags") {
@@ -276,7 +272,6 @@ case "clientName":
       });
     }
     
-    // Apply global search
     if (searchTerm.trim() !== "") {
       filtered = filtered.filter((candidate) => {
         const searchString = searchTerm.toLowerCase();
@@ -293,7 +288,6 @@ case "clientName":
       });
     }
 
-    // Apply date range filter
     if (startDate && endDate) {
       filtered = filtered.filter((candidate) => {
         if (!candidate.sourceDate) return false;
@@ -306,38 +300,39 @@ case "clientName":
       });
     }
     
-    // Apply filter conditions (AND/OR logic)
     let result = filtered;
-    
-    for (let i = 0; i < filters.length; i++) {
-      const filter = filters[i];
-      if (!filter.field || !filter.value) continue;
-      
-      result = result.filter((candidate) => {
+
+    filters.forEach((filter, index) => {
+      if (!filter.field || !filter.value) return;
+
+      const filterFn = (candidate) => {
         const fieldValue = getFieldValue(candidate, filter.field);
-        if (fieldValue === undefined || fieldValue === null) return false;
-        
-        let match = false;
+        if (!fieldValue) return false;
+
         if (filter.field === "tags") {
-          const filterValueStr = filter.value.toString().toLowerCase();
-          match = (fieldValue || []).some(tag =>
-            tag.toLowerCase().includes(filterValueStr)
+          return (fieldValue || []).some(tag =>
+            tag.toLowerCase().includes(filter.value.toLowerCase())
           );
-        } else {
-          const fieldValueStr = fieldValue.toString().toLowerCase();
-          const filterValueStr = filter.value.toString().toLowerCase();
-          match = fieldValueStr === filterValueStr;
         }
-        return match;
-      });
-    }
+
+        return fieldValue.toString().toLowerCase() === filter.value.toLowerCase();
+      };
+
+      if (index === 0) {
+        result = result.filter(filterFn);
+      } else if (filter.condition === "AND") {
+        result = result.filter(filterFn);
+      } else if (filter.condition === "OR") {
+        const orData = filtered.filter(filterFn);
+        result = [...new Set([...result, ...orData])];
+      }
+    });
     
     return result;
   };
 
   const filteredData = applyFilters(data);
 
-  // ================== SORTING FUNCTION ==================
   const sortedData = [...filteredData].sort((a, b) => {
     if (!sortField) return 0;
     
@@ -353,10 +348,10 @@ case "clientName":
     } else if (sortField === "sourceDate") {
       aVal = a.sourceDate ? new Date(a.sourceDate).getTime() : 0;
       bVal = b.sourceDate ? new Date(b.sourceDate).getTime() : 0;
-    } else if (sortField === "status") {
-      aVal = (a.status || "").toString().toLowerCase();
-      bVal = (b.status || "").toString().toLowerCase();
-    } else {
+    }else if (sortField === "status") {
+  aVal = (getLatestClientStatus(a) || "").toString().toLowerCase();
+  bVal = (getLatestClientStatus(b) || "").toString().toLowerCase();
+}else {
       aVal = (a[sortField] || "").toString().toLowerCase();
       bVal = (b[sortField] || "").toString().toLowerCase();
     }
@@ -368,13 +363,11 @@ case "clientName":
     }
   });
 
-  // ================== PAGINATION LOGIC ==================
   const indexOfLast = currentPage * itemsPerPage;
   const indexOfFirst = indexOfLast - itemsPerPage;
   const currentData = sortedData.slice(indexOfFirst, indexOfLast);
   const totalPages = Math.ceil(sortedData.length / itemsPerPage);
 
-  // ================== STATUS BADGE STYLES ==================
   const getStatusBadgeStyle = (status) => {
     switch (status) {
       case "Selected":
@@ -417,86 +410,125 @@ case "clientName":
     setActiveSection("clientInterview");
   };
 
-  const removeClientSection = (sectionId) => {
-    const newSections = clientSections.filter(s => (s._id || s.tempId) !== sectionId);
-    setClientSections(newSections);
-    
-    if (activeClientIndex >= newSections.length) {
-      setActiveClientIndex(Math.max(0, newSections.length - 1));
+const removeClientSection = (sectionId) => {
+  setClientSections(prev => {
+    const updated = prev.filter(
+      s => (s._id || s.tempId) !== sectionId
+    );
+
+    // ✅ VERY IMPORTANT: update editCandidate also
+    setEditCandidate(prevCandidate => ({
+      ...prevCandidate,
+      clientSections: updated
+    }));
+
+    // update active index
+    if (activeClientIndex >= updated.length) {
+      setActiveClientIndex(Math.max(0, updated.length - 1));
     }
-    
-    if (newSections.length === 0) {
+
+    if (updated.length === 0) {
       setActiveSection("candidate");
     }
-  };
 
+    return updated;
+  });
+};
   const updateClientSectionField = (sectionId, field, value) => {
     setClientSections(prev => prev.map(section =>
       (section._id || section.tempId) === sectionId ? { ...section, [field]: value } : section
     ));
   };
 
+  // ✅ FIXED handleEdit - Preserves attachments properly and fixes roundNumber logic
   const handleEdit = (candidate) => {
-  setEditCandidate({
-    ...candidate,
-    status: candidate.status || "",
-    candidateStatus: candidate.candidateStatus || "",
-    remark: candidate.remark || "",
-    tags: candidate.tags || []
-  });
+    console.log("🔍 Loading candidate for edit:", candidate._id);
+    console.log("📎 Existing attachments:", candidate.attachments);
+    
+setEditCandidate({
+  ...candidate,
 
-  setClientSections(
-    Array.isArray(candidate.clientSections) && candidate.clientSections.length > 0
-      ? candidate.clientSections.map(section => ({
-          clientName: section.clientName || "",
-          designation: section.designation || "",
-          clientLocation: section.clientLocation || "",
-          process: section.process || "",
-          processLOB: section.processLOB || "",
-          salary: section.salary || "",
-          hrRemark: section.hrRemark || "",
-          clientStatus: section.clientStatus || "",
-          _id: section._id
-        }))
-      : [
-          {
-            tempId: Date.now(),
-            clientName: "",
-            designation: "",
-            clientLocation: "",
-            process: "",
-            processLOB: "",
-            salary: "",
-            hrRemark: "",
-            clientStatus: ""
-          }
-        ]
-  );
+  // ✅ recruiter status show karo (NOT client status)
+  status: candidate.status || "",
 
-  // ⭐ ADD THIS LINE HERE
-  setActiveClientIndex(0);
+  candidateStatus: candidate.candidateStatus || "",
+  remark: candidate.remark || "",
+  tags: candidate.tags || [],
+  attachments: candidate.attachments || []
+});
 
-  setNewFiles([]);
-  setActiveSection("candidate");
-  setRoundDropdown(false);
-  setShowEditPopup(true);
-};
+    setClientSections(
+      Array.isArray(candidate.clientSections) && candidate.clientSections.length > 0
+        ? candidate.clientSections.map(section => ({
+            clientName: section.clientName || "",
+            designation: section.designation || "",
+            clientLocation: section.clientLocation || "",
+            process: section.process || "",
+            processLOB: section.processLOB || "",
+            salary: section.salary || "",
+            hrRemark: section.hrRemark || "",
+            clientStatus: section.clientStatus || "",
+            _id: section._id
+          }))
+        : [
+            {
+              tempId: Date.now(),
+              clientName: "",
+              designation: "",
+              clientLocation: "",
+              process: "",
+              processLOB: "",
+              salary: "",
+              hrRemark: "",
+              clientStatus: ""
+            }
+          ]
+    );
+
+    // ✅ FIXED: Load interview rounds with proper roundNumber logic
+    setInterviewRounds(
+      Array.isArray(candidate.interviewRounds) && candidate.interviewRounds.length > 0
+        ? candidate.interviewRounds.map((round, index) => ({
+            _id: round._id || round.id,
+            id: round._id || round.id,
+            roundName: round.roundName || "",
+            roundNumber: Number(round.roundNumber || index + 1), // ✅ FIXED: Use Number() and fallback to index+1
+            interviewDate: round.interviewDate || "",
+            interviewTime: round.interviewTime || "",
+            hrStatus: round.hrStatus || "",
+            interviewMode: round.interviewMode || "",
+            hrRemark: round.hrRemark || "",
+            finalFeedback: round.finalFeedback || ""
+          }))
+        : []
+    );
+
+    setActiveClientIndex(0);
+    setNewFiles([]); // ✅ Clear new files when opening edit
+    setActiveSection("candidate");
+    setRoundDropdown(false);
+    setShowEditPopup(true);
+  };
+
   const handleDelete = async (id, name) => {
-  const confirmDelete = window.confirm(`Are you sure you want to delete ${name}?`);
-  if (!confirmDelete) return;
+    const confirmDelete = window.confirm(`Are you sure you want to delete ${name}?`);
+    if (!confirmDelete) return;
 
-  try {
-    await api.delete(`/delete-candidate/${id}`);
-
-    // ✅ IMPORTANT: reload from backend
-    await loadData();
-
-    alert("Candidate deleted successfully!");
-  } catch (err) {
-    console.error(err);
-    alert("Delete failed. Please try again.");
-  }
-};
+    try {
+      await api.delete(`/delete-candidate/${id}`, {
+        data: {
+          deletedByName: currentUser?.firstName && currentUser?.lastName
+            ? `${currentUser.firstName} ${currentUser.lastName}`
+            : currentUser?.name || "System"
+        }
+      });
+      await loadData();
+      alert("Candidate deleted successfully!");
+    } catch (err) {
+      console.error(err);
+      alert("Delete failed. Please try again.");
+    }
+  };
 
   const fileToBase64 = (file) => {
     return new Promise((resolve, reject) => {
@@ -505,6 +537,32 @@ case "clientName":
       reader.onload = () => resolve(reader.result);
       reader.onerror = (error) => reject(error);
     });
+  };
+
+  // ✅ FIXED selectRound - Proper number comparison and round creation
+  const selectRound = (round) => {
+    setInterviewRounds((prev) => {
+      // ✅ FIXED: Use Number() for proper comparison
+      const alreadyExists = prev.some((r) => Number(r.roundNumber) === Number(round));
+      if (alreadyExists) {
+        alert(`Round ${round} already added ❌`);
+        return prev;
+      }
+      const newRound = {
+        _id: Date.now().toString(),
+        id: Date.now().toString(),
+        roundName: `Round ${round}`,
+        roundNumber: Number(round), // ✅ Store as number
+        interviewDate: "",
+        interviewTime: "",
+        hrStatus: "",
+        interviewMode: "",
+        hrRemark: "",
+        finalFeedback: ""
+      };
+      return [...prev, newRound];
+    });
+    setRoundDropdown(false);
   };
 
   const handleSaveEdit = async () => {
@@ -527,6 +585,7 @@ case "clientName":
     }
 
     try {
+      // Convert new files to base64
       const newAttachments = [];
       for (const file of newFiles) {
         const base64Data = await fileToBase64(file);
@@ -540,12 +599,25 @@ case "clientName":
         });
       }
 
-      const allAttachments = [
-        ...(editCandidate.attachments || []),
-        ...newAttachments
-      ];
+      // ✅ CRITICAL FIX: Preserve existing attachments properly
+      const existingAttachments = Array.isArray(editCandidate.attachments) 
+        ? editCandidate.attachments 
+        : [];
+      
+      const allAttachments = [...existingAttachments, ...newAttachments];
+      
+      // ✅ DEBUG LOGS
+      console.log("📎 OLD FILES:", existingAttachments.length);
+      console.log("📎 NEW FILES:", newAttachments.length);
+      console.log("📎 TOTAL FILES:", allAttachments.length);
 
       const safeCandidate = JSON.parse(JSON.stringify(editCandidate));
+
+      // ✅ FIXED: Ensure interviewRounds have proper roundNumber when saving
+      const safeInterviewRounds = (interviewRounds || []).map((r, i) => ({
+        ...r,
+        roundNumber: Number(r.roundNumber || i + 1)
+      }));
 
       const updateData = {
         ...safeCandidate,
@@ -567,11 +639,11 @@ case "clientName":
         expectedCTC: safeCandidate.expectedCTC || "",
         noticePeriod: safeCandidate.noticePeriod || "",
         resume: safeCandidate.resume || "",
-       status: safeCandidate.status,
+        status: safeCandidate.status,
         remark: safeCandidate.remark || "",
         tags: safeCandidate.tags || [],
-        attachments: allAttachments,
-        interviewRounds: interviewRounds || [],
+        attachments: allAttachments, // ✅ Save with preserved attachments
+        interviewRounds: safeInterviewRounds, // ✅ FIXED: Use normalized interview rounds
         clientSections: (Array.isArray(clientSections) ? clientSections : []).map(sec => ({
           clientName: sec?.clientName || "",
           designation: sec?.designation || "",
@@ -587,12 +659,43 @@ case "clientName":
       
       delete updateData._id;
 
-      console.log("Saving data:", updateData);
+      console.log("💾 Saving data with attachments:", allAttachments.length);
 
-      await api.put(`/update-candidate/${editCandidate._id}`, updateData);
+      await api.put(`/update-candidate/${editCandidate._id}`, {
+        ...updateData,
+        updatedByName: currentUser?.firstName && currentUser?.lastName
+          ? `${currentUser.firstName} ${currentUser.lastName}`
+          : currentUser?.name || "System"
+      });
+      
       await loadData();
+
+      // 🔥 get updated candidate from backend
+      const updatedRes = await api.get("/candidates");
+      const updatedList = updatedRes.data || [];
+
+      // find current candidate
+      const updatedCandidate = updatedList.find(
+        c => c._id === editCandidate._id
+      );
+
+      // ✅ FIXED: Update popup data with proper interviewRounds normalization
+      if (updatedCandidate) {
+        setEditCandidate(updatedCandidate);
+        setClientSections(updatedCandidate.clientSections || []);
+        // ✅ CRITICAL FIX: Update interviewRounds state after save
+        setInterviewRounds(
+          Array.isArray(updatedCandidate.interviewRounds)
+            ? updatedCandidate.interviewRounds.map((r, i) => ({
+                ...r,
+                roundNumber: Number(r.roundNumber || i + 1)
+              }))
+            : []
+        );
+      }
+
       alert("Saved successfully ✅");
-      setNewFiles([]);
+      setNewFiles([]);      
     } catch (err) {
       console.error("Save error:", err);
       alert("Save failed ❌: " + (err.response?.data?.error || err.message));
@@ -626,6 +729,7 @@ case "clientName":
       resume: "",
       status: "",
       remark: "",
+      attachments: editCandidate.attachments || [] // ✅ Preserve attachments on reset
     });
     setInterviewRounds([]);
     setClientSections([]);
@@ -634,28 +738,14 @@ case "clientName":
     setRoundDropdown(false);
   };
 
-  const selectRound = (round) => {
-    const newRound = {
-      id: Date.now(),
-      roundName: `Round ${round}`,
-      interviewDate: "",
-      interviewTime: "",
-      hrStatus: "",
-      interviewMode: "",
-      hrRemark: "",
-      finalFeedback: ""
-    };
-    setInterviewRounds(prev => [...prev, newRound]);
-    setRoundDropdown(false);
-  };
-
   const removeRound = (roundId) => {
-    setInterviewRounds(prev => prev.filter(round => round.id !== roundId));
+    setInterviewRounds(prev => prev.filter(round => round._id !== roundId && round.id !== roundId));
   };
 
+  // updateRoundField - Checks both _id and id
   const updateRoundField = (roundId, field, value) => {
     setInterviewRounds(prev => prev.map(round => 
-      round.id === roundId ? { ...round, [field]: value } : round
+      (round._id === roundId || round.id === roundId) ? { ...round, [field]: value } : round
     ));
   };
 
@@ -809,6 +899,43 @@ case "clientName":
     "MBA", "BCA", "MCA", "B.Tech", "M.Tech", "PhD", "Other"
   ];
 
+  // ================== GET LATEST CLIENT STATUS ==================
+const getLatestClientStatus = (candidate) => {
+  if (!candidate.clientSections || candidate.clientSections.length === 0) {
+    return "N/A";
+  }
+
+  const lastValid = [...candidate.clientSections]
+    .reverse()
+    .find(cs => cs.clientStatus && cs.clientStatus.trim() !== "");
+
+  return lastValid?.clientStatus || "N/A";
+};
+
+  const getClientStatusStyle = (status) => {
+  switch (status) {
+    case "N/A":
+      return ""; // ✅ no background
+
+    case "Offer Released":
+      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
+
+    case "Offer Pending":
+      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
+
+    case "Joined":
+      return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200";
+
+    case "No Show":
+      return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
+
+    case "Rejected- Client":
+      return "bg-red-200 text-red-900 dark:bg-red-800 dark:text-red-300";
+
+    default:
+      return "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400";
+  }
+};
   const renderFormSection = () => {
     switch(activeSection) {
       case "candidate":
@@ -818,18 +945,19 @@ case "clientName":
               <label className={`block text-sm font-medium mb-2 ${themeStyles.secondaryText}`}>
                 Candidate Status
               </label>
-<input
-  type="text"
-  value={
-    clientSections?.length > 0
-      ? clientSections
-          .filter(cs => cs.clientStatus && cs.clientStatus.trim() !== "")
-          .slice(-1)[0]?.clientStatus || ""
-      : ""
-  }
-  readOnly
-  className={`${themeStyles.input} border rounded-lg p-2 w-full bg-gray-200`}
-/>
+              <input
+                type="text"
+                value={
+                  clientSections?.length > 0
+                    ? [...clientSections]
+  .reverse()
+  .find(cs => cs.clientStatus && cs.clientStatus.trim() !== "")
+  ?.clientStatus || "N/A"
+                    : ""
+                }
+                readOnly
+                className={`${themeStyles.input} border rounded-lg p-2 w-full bg-gray-200`}
+              />
             </div>
             <div className={`${themeStyles.card} rounded-lg p-5 border shadow-sm`}>
               <h4 className="text-sm font-semibold mb-4 flex items-center gap-2">👤 Basic Details</h4>
@@ -961,9 +1089,10 @@ case "clientName":
                   <label className={`block text-sm font-medium mb-1 ${themeStyles.secondaryText}`}>Status</label>
                   <select
                     value={editCandidate.status || ""}
-onChange={(e) => {
-  handleEditChange("status", e.target.value);
-}}                    className={`${themeStyles.input} border rounded-lg p-2 w-full`}
+                    onChange={(e) => {
+                      handleEditChange("status", e.target.value);
+                    }}
+                    className={`${themeStyles.input} border rounded-lg p-2 w-full`}
                   >
                     <option value="">Select Status</option>
                     <option value="Selected">Selected</option>
@@ -1028,7 +1157,7 @@ onChange={(e) => {
           </div>
         );
       case "clientInterview":
-    const currentSection = clientSections[activeClientIndex]; 
+        const currentSection = clientSections[activeClientIndex]; 
         if (!currentSection) {
           return (
             <div className="text-center py-12">
@@ -1048,23 +1177,23 @@ onChange={(e) => {
                   Client Status
                 </label>
                 <select
-  value={currentSection.clientStatus || ""}
-  onChange={(e) =>
-    updateClientSectionField(
-      currentSection._id || currentSection.tempId,
-      "clientStatus",
-      e.target.value
-    )
-  }
-  className={`${themeStyles.input} border rounded-lg p-2 w-full`}
->
-  <option value="">Select Status</option>
-  <option value="Offer Released">Offer Released</option>
-  <option value="Offer Pending">Offer Pending</option>
-  <option value="Joined">Joined</option>
-  <option value="No Show">No Show</option>
- <option value="Rejected- Client">Rejected- Client</option>
-</select>
+                  value={currentSection.clientStatus || ""}
+                  onChange={(e) =>
+                    updateClientSectionField(
+                      currentSection._id || currentSection.tempId,
+                      "clientStatus",
+                      e.target.value
+                    )
+                  }
+                  className={`${themeStyles.input} border rounded-lg p-2 w-full`}
+                >
+                  <option value="">Select Status</option>
+                  <option value="Offer Released">Offer Released</option>
+                  <option value="Offer Pending">Offer Pending</option>
+                  <option value="Joined">Joined</option>
+                  <option value="No Show">No Show</option>
+                  <option value="Rejected- Client">Rejected- Client</option>
+                </select>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -1158,15 +1287,30 @@ onChange={(e) => {
                         className="fixed inset-0 z-[99998]"
                         onClick={() => setRoundDropdown(false)}
                       />
-<div className="absolute right-0 mt-2 w-40 bg-gray-800 border border-gray-600 rounded-lg shadow-lg z-[99999] text-white">                        {[1, 2, 3, 4, 5].map((round) => (
-                          <div
-                            key={round}
-                            onClick={() => selectRound(round)}
-                            className="px-4 py-2 text-sm cursor-pointer hover:bg-gray-700 transition-all"
-                          >
-                            Round {round}
-                          </div>
-                        ))}
+                      <div className="absolute right-0 mt-2 w-40 bg-gray-800 border border-gray-600 rounded-lg shadow-lg z-[99999] text-white">
+                        {[1, 2, 3, 4, 5].map((round) => {
+                          // ✅ FIXED: Use Number() for proper comparison in round dropdown
+                          const exists = interviewRounds.some(
+                            (r) => Number(r.roundNumber) === round
+                          );
+                          return (
+                            <div
+                              key={round}
+                              onClick={() => {
+                                if (!exists) {
+                                  selectRound(round);
+                                }
+                              }}
+                              className={`px-4 py-2 text-sm ${
+                                exists
+                                  ? "text-gray-400 cursor-not-allowed"
+                                  : "cursor-pointer hover:bg-gray-700"
+                              }`}
+                            >
+                              Round {round} {exists && "✔"}
+                            </div>
+                          );
+                        })}
                       </div>
                     </>
                   )}
@@ -1181,23 +1325,23 @@ onChange={(e) => {
               ) : (
                 <div className="space-y-4">
                   {interviewRounds.map((round, idx) => (
-                    <div key={round.id} className={`p-4 rounded-lg border ${themeStyles.border}`}>
+                    <div key={round._id || round.id} className={`p-4 rounded-lg border ${themeStyles.border}`}>
                       <div className="flex justify-between items-center mb-3">
                         <h5 className="text-sm font-semibold text-blue-600">{round.roundName}</h5>
-                        <button onClick={() => removeRound(round.id)} className="px-2 py-1 text-xs bg-red-500 hover:bg-red-600 text-white rounded">Remove</button>
+                        <button onClick={() => removeRound(round._id || round.id)} className="px-2 py-1 text-xs bg-red-500 hover:bg-red-600 text-white rounded">Remove</button>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <label className={`text-xs block mb-1 ${themeStyles.secondaryText}`}>Interview Date</label>
-                          <input type="date" value={round.interviewDate} onChange={(e) => updateRoundField(round.id, "interviewDate", e.target.value)} className={`${themeStyles.input} border rounded-lg p-2 w-full text-sm`} />
+                          <input type="date" value={round.interviewDate} onChange={(e) => updateRoundField(round._id || round.id, "interviewDate", e.target.value)} className={`${themeStyles.input} border rounded-lg p-2 w-full text-sm`} />
                         </div>
                         <div>
                           <label className={`text-xs block mb-1 ${themeStyles.secondaryText}`}>Interview Time</label>
-                          <input type="time" value={round.interviewTime} onChange={(e) => updateRoundField(round.id, "interviewTime", e.target.value)} className={`${themeStyles.input} border rounded-lg p-2 w-full text-sm`} />
+                          <input type="time" value={round.interviewTime} onChange={(e) => updateRoundField(round._id || round.id, "interviewTime", e.target.value)} className={`${themeStyles.input} border rounded-lg p-2 w-full text-sm`} />
                         </div>
                         <div>
                           <label className={`text-xs block mb-1 ${themeStyles.secondaryText}`}>Status</label>
-                          <select value={round.hrStatus} onChange={(e) => updateRoundField(round.id, "hrStatus", e.target.value)} className={`${themeStyles.input} border rounded-lg p-2 w-full text-sm`}>
+                          <select value={round.hrStatus} onChange={(e) => updateRoundField(round._id || round.id, "hrStatus", e.target.value)} className={`${themeStyles.input} border rounded-lg p-2 w-full text-sm`}>
                             <option value="">Select Status</option>
                             <option value="Selected">Selected</option>
                             <option value="Rejected">Rejected</option>
@@ -1207,7 +1351,7 @@ onChange={(e) => {
                         </div>
                         <div>
                           <label className={`text-xs block mb-1 ${themeStyles.secondaryText}`}>Interview Mode</label>
-                          <select value={round.interviewMode} onChange={(e) => updateRoundField(round.id, "interviewMode", e.target.value)} className={`${themeStyles.input} border rounded-lg p-2 w-full text-sm`}>
+                          <select value={round.interviewMode} onChange={(e) => updateRoundField(round._id || round.id, "interviewMode", e.target.value)} className={`${themeStyles.input} border rounded-lg p-2 w-full text-sm`}>
                             <option value="">Select Mode</option>
                             <option value="Online">Online</option>
                             <option value="Offline">Offline</option>
@@ -1216,11 +1360,11 @@ onChange={(e) => {
                         </div>
                         <div className="col-span-2">
                           <label className={`text-xs block mb-1 ${themeStyles.secondaryText}`}>Remark</label>
-                          <textarea rows="2" value={round.hrRemark} onChange={(e) => updateRoundField(round.id, "hrRemark", e.target.value)} className={`${themeStyles.input} border rounded-lg p-2 w-full text-sm`} placeholder="Enter remarks..." />
+                          <textarea rows="2" value={round.hrRemark} onChange={(e) => updateRoundField(round._id || round.id, "hrRemark", e.target.value)} className={`${themeStyles.input} border rounded-lg p-2 w-full text-sm`} placeholder="Enter remarks..." />
                         </div>
                         <div className="col-span-2">
                           <label className={`text-xs block mb-1 ${themeStyles.secondaryText}`}>Final Feedback</label>
-                          <textarea rows="2" value={round.finalFeedback} onChange={(e) => updateRoundField(round.id, "finalFeedback", e.target.value)} className={`${themeStyles.input} border rounded-lg p-2 w-full text-sm`} placeholder="Enter final feedback..." />
+                          <textarea rows="2" value={round.finalFeedback} onChange={(e) => updateRoundField(round._id || round.id, "finalFeedback", e.target.value)} className={`${themeStyles.input} border rounded-lg p-2 w-full text-sm`} placeholder="Enter final feedback..." />
                         </div>
                       </div>
                     </div>
@@ -1246,8 +1390,46 @@ onChange={(e) => {
                           </div>
                         </div>
                         <div className="flex gap-1">
-                          <button onClick={() => previewFileHandler(file)} className="px-2 py-1 bg-green-500 hover:bg-green-600 text-white text-xs rounded">Preview</button>
-                          <button onClick={() => downloadFile(file)} className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded">Download</button>
+                          <button onClick={async () => {
+                            const full = await getFullCandidate(editCandidate._id);
+                            if (!full) return;
+
+                            const fullFile = full.attachments?.find(
+                              f =>
+                                f.id === file.id ||
+                                f.name === file.name ||
+                                f.uploadedAt === file.uploadedAt
+                            );
+                            if (!fullFile || !fullFile.data) {
+                              alert("File data not found ❌");
+                              return;
+                            }
+
+                            previewFileHandler(fullFile);
+                          }}
+                          className="px-2 py-1 bg-green-500 hover:bg-green-600 text-white text-xs rounded">
+                            Preview
+                          </button>
+                          <button onClick={async () => {
+                            const full = await getFullCandidate(editCandidate._id);
+                            if (!full) return;
+
+                            const fullFile = full.attachments?.find(
+                              f =>
+                                f.id === file.id ||
+                                f.name === file.name ||
+                                f.uploadedAt === file.uploadedAt
+                            );
+                            if (!fullFile || !fullFile.data) {
+                              alert("File data not found ❌");
+                              return;
+                            }
+
+                            downloadFile(fullFile);
+                          }}
+                          className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded">
+                            Download
+                          </button>
                           <button onClick={() => removeExistingFile(idx)} className="px-2 py-1 bg-red-500 hover:bg-red-600 text-white text-xs rounded">Remove</button>
                         </div>
                       </div>
@@ -1390,7 +1572,7 @@ onChange={(e) => {
           </div>
         </div>
 
-        {/* Active Filters Display - Only show filter conditions, not quick filter */}
+        {/* Active Filters Display */}
         {filters.some(f => f.field && f.value) && (
           <div className="mb-4 flex flex-wrap gap-2">
             {filters.map((filter) => (
@@ -1446,7 +1628,6 @@ onChange={(e) => {
                 <th className="px-4 py-3 text-left font-medium">Designation</th>
                 <th className="px-4 py-3 text-left font-medium">Files</th>
                 <th className="px-4 py-3 text-left font-medium">Client Name</th>
-               
                 <th className="px-4 py-3 text-left font-medium cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-all" onClick={() => { if (sortField === "createdAt") { setSortOrder(sortOrder === "asc" ? "desc" : "asc"); } else { setSortField("createdAt"); setSortOrder("asc"); } }}>
                   Created At {sortField === "createdAt" && (sortOrder === "asc" ? "↑" : "↓")}
                 </th>
@@ -1474,96 +1655,160 @@ onChange={(e) => {
                   </td>
                 </tr>
               ) : (
-                currentData.map((c, index) => (
-                  <tr key={c._id} className={`border-b ${themeStyles.tableRow} ${index % 2 === 0 ? (isDarkMode ? "bg-gray-800/30" : "bg-gray-50/50") : ""}`}>
-                    <td className="px-4 py-3 font-medium">{indexOfFirst + index + 1}</td>
-                    <td className="px-4 py-3">
-                      {c.status ? (
-                        <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeStyle(c.status)}`}>
-                          {c.status}
-                        </span>
-                      ) : (
-                        <span className="text-gray-400 text-xs">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 font-medium">{c.firstName} {c.lastName}</td>
-                    <td className="px-4 py-3"><a href={`mailto:${c.email}`} className="text-blue-600 hover:underline">{c.email}</a></td>
-                    <td className="px-4 py-3"><a href={`tel:${c.phone}`} className="hover:underline">{c.phone}</a></td>
-                    <td className="px-4 py-3">{c.secondaryPhone || "—"}</td>
-                    <td className="px-4 py-3">{c.recruiter || "—"}</td>
-                    <td className="px-4 py-3">{c.sourcedFrom ? <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full text-xs">{c.sourcedFrom}</span> : "—"}</td>
-                    <td className="px-4 py-3">{c.sourceDate ? new Date(c.sourceDate).toLocaleDateString() : "—"}</td>
-                    <td className="px-4 py-3">{c.gender ? <span className="capitalize">{c.gender === "male" ? "Male" : c.gender === "female" ? "Female" : c.gender}</span> : "—"}</td>
-                    <td className="px-4 py-3">{c.city || "—"}</td>
-                    <td className="px-4 py-3">{c.state || "—"}</td>
-                   <td className="px-4 py-3 text-xs">
-  {c.clientSections && c.clientSections.length > 0
-    ? (() => {
-        const valid = c.clientSections.filter(
-          cs => cs.designation && cs.designation.trim() !== ""
-        );
-
-        if (valid.length === 0) return "—";
-
-        return valid[valid.length - 1].designation;
-      })()
-    : "—"}
-                </td>
-                    <td className="px-4 py-3">
-                      {c.attachments && c.attachments.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          <span className="text-green-600 text-xs font-medium">{c.attachments.length} file(s)</span>
-                          <div className="flex gap-1">
-                            {c.attachments.slice(0, 2).map((file, i) => (
-                              <div key={file.id || i} className="flex gap-1">
-                                <button onClick={() => downloadFile(file)} className="px-1.5 py-0.5 bg-blue-500 text-white text-xs rounded" title="Download">⬇️</button>
-                                <button onClick={() => previewFileHandler(file)} className="px-1.5 py-0.5 bg-green-500 text-white text-xs rounded" title="Preview">👁️</button>
-                              </div>
-                            ))}
-                            {c.attachments.length > 2 && <span className="text-xs text-gray-500">+{c.attachments.length - 2}</span>}
-                          </div>
-                        </div>
-                      ) : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-xs">
-                      {c.clientSections && c.clientSections.length > 0
-                        ? (() => {
-                            const validClients = c.clientSections.filter(cs => cs.clientName);
-                            const lastClient = validClients[validClients.length - 1];
-                            return lastClient ? lastClient.clientName : "—";
-                          })()
-                        : "—"}
-                    </td>
-                   
-                    <td className="px-4 py-3 text-xs">
-                      {c.createdAt ? (
-                        <div>
-                          <div>{new Date(c.createdAt).toLocaleDateString()}</div>
-                          <div className="text-xs opacity-70">{new Date(c.createdAt).toLocaleTimeString()}</div>
-                        </div>
-                      ) : "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2 justify-center">
-                        <button onClick={() => handleEdit(c)} className="px-2 py-1 bg-yellow-500 hover:bg-yellow-600 text-white rounded text-xs">Edit</button>
-                        {canDeleteCandidate && (
-                          <button 
-                            onClick={() => handleDelete(c._id, `${c.firstName} ${c.lastName}`)} 
-                            className="px-2 py-1 bg-red-500 hover:bg-red-600 text-white rounded text-xs"
-                          >
-                            Delete
-                          </button>
+                currentData.map((c, index) => {
+                  const latestClientStatus = getLatestClientStatus(c);
+                  const displayStatus = latestClientStatus || c.status;
+                  
+                  return (
+                    <tr key={c._id} className={`border-b ${themeStyles.tableRow} ${index % 2 === 0 ? (isDarkMode ? "bg-gray-800/30" : "bg-gray-50/50") : ""}`}>
+                      <td className="px-4 py-3 font-medium">{indexOfFirst + index + 1}</td>
+                      <td className="px-4 py-3">
+                        {displayStatus ? (
+                          <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${getClientStatusStyle(displayStatus)}`}>
+                            {displayStatus}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400 text-xs">—</span>
                         )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="px-4 py-3 font-medium">{c.firstName} {c.lastName}</td>
+                      <td className="px-4 py-3"><a href={`mailto:${c.email}`} className="text-blue-600 hover:underline">{c.email}</a></td>
+                      <td className="px-4 py-3"><a href={`tel:${c.phone}`} className="hover:underline">{c.phone}</a></td>
+                      <td className="px-4 py-3">{c.secondaryPhone || "—"}</td>
+                      <td className="px-4 py-3">{c.recruiter || "—"}</td>
+                      <td className="px-4 py-3">{c.sourcedFrom ? <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full text-xs">{c.sourcedFrom}</span> : "—"}</td>
+                      <td className="px-4 py-3">{c.sourceDate ? new Date(c.sourceDate).toLocaleDateString() : "—"}</td>
+                      <td className="px-4 py-3">{c.gender ? <span className="capitalize">{c.gender === "male" ? "Male" : c.gender === "female" ? "Female" : c.gender}</span> : "—"}</td>
+                      <td className="px-4 py-3">{c.city || "—"}</td>
+                      <td className="px-4 py-3">{c.state || "—"}</td>
+                      <td className="px-4 py-3 text-xs">
+                        {c.clientSections && c.clientSections.length > 0
+                          ? (() => {
+                              const valid = c.clientSections.filter(
+                                cs => cs.designation && cs.designation.trim() !== ""
+                              );
+                              if (valid.length === 0) return "—";
+                              return valid[valid.length - 1].designation;
+                            })()
+                          : "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        {c.attachments && c.attachments.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            
+                            <span className="text-green-600 text-xs font-medium">
+                              {c.attachments.length} file(s)
+                            </span>
+
+                            <div className="flex gap-1">
+                              {c.attachments.slice(0, 2).map((file, i) => (
+                                <div key={file.id || i} className="flex gap-1">
+
+                                  {/* DOWNLOAD BUTTON */}
+                                  <button
+                                    onClick={async () => {
+                                      const full = await getFullCandidate(c._id);
+                                      if (!full) return;
+
+                                      const fullFile = full.attachments?.find(
+                                        f =>
+                                          f.id === file.id ||
+                                          f.name === file.name ||
+                                          f.uploadedAt === file.uploadedAt
+                                      );
+
+                                      if (!fullFile || !fullFile.data) {
+                                        alert("Download not available ❌");
+                                        return;
+                                      }
+
+                                      downloadFile(fullFile);
+                                    }}
+                                    className="px-1.5 py-0.5 bg-blue-500 text-white text-xs rounded"
+                                    title="Download"
+                                  >
+                                    ⬇️
+                                  </button>
+
+                                  {/* PREVIEW BUTTON */}
+                                  <button
+                                    onClick={async () => {
+                                      const full = await getFullCandidate(c._id);
+                                      if (!full) return;
+
+                                      const fullFile = full.attachments?.find(
+                                        f =>
+                                          f.id === file.id ||
+                                          f.name === file.name ||
+                                          f.uploadedAt === file.uploadedAt
+                                      );
+
+                                      if (!fullFile || !fullFile.data) {
+                                        alert("Preview not available ❌");
+                                        return;
+                                      }
+
+                                      previewFileHandler(fullFile);
+                                    }}
+                                    className="px-1.5 py-0.5 bg-green-500 text-white text-xs rounded"
+                                    title="Preview"
+                                  >
+                                    👁️
+                                  </button>
+
+                                </div>
+                              ))}
+
+                              {c.attachments.length > 2 && (
+                                <span className="text-xs text-gray-500">
+                                  +{c.attachments.length - 2}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        {c.clientSections && c.clientSections.length > 0
+                          ? (() => {
+                              const validClients = c.clientSections.filter(cs => cs.clientName);
+                              const lastClient = validClients[validClients.length - 1];
+                              return lastClient ? lastClient.clientName : "—";
+                            })()
+                          : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        {c.createdAt ? (
+                          <div>
+                            <div>{new Date(c.createdAt).toLocaleDateString()}</div>
+                            <div className="text-xs opacity-70">{new Date(c.createdAt).toLocaleTimeString()}</div>
+                          </div>
+                        ) : "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-2 justify-center">
+                          <button onClick={() => handleEdit(c)} className="px-2 py-1 bg-yellow-500 hover:bg-yellow-600 text-white rounded text-xs">Edit</button>
+                          {canDeleteCandidate && (
+                            <button 
+                              onClick={() => handleDelete(c._id, `${c.firstName} ${c.lastName}`)} 
+                              className="px-2 py-1 bg-red-500 hover:bg-red-600 text-white rounded text-xs"
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
 
-        {/* ✅ PAGINATION BUTTONS */}
+        {/* Pagination */}
         {!isLoading && totalPages > 1 && (
           <div className="flex justify-between items-center mt-6 pt-4 border-t">
             <button
@@ -1603,7 +1848,7 @@ onChange={(e) => {
         )}
       </div>
 
-      {/* ================== FILTER SIDEBAR ================== */}
+      {/* Filter Sidebar */}
       {showFilterSidebar && (
         <div className="fixed inset-0 z-50 flex">
           <div className="flex-1 bg-black/60" onClick={() => setShowFilterSidebar(false)} />
@@ -1613,91 +1858,26 @@ onChange={(e) => {
               <button onClick={() => setShowFilterSidebar(false)} className="text-gray-400 hover:text-white">✕</button>
             </div>
 
-            {/* Quick Filters - INDEPENDENT, does NOT add to filters array */}
+            {/* Quick Filters */}
             <div className="mb-6 p-4 border border-gray-700 rounded-lg bg-gray-900">
               <h3 className="text-sm font-semibold mb-3 text-gray-300">Quick Filters</h3>
               <div className="flex flex-wrap gap-2 mb-3">
-                <button 
-                  onClick={() => {
-                    setActiveQuickFilter("recruiter");
-                    setQuickFilterValue("");
-                  }} 
-                  className={`px-3 py-1.5 rounded-lg text-sm transition-all ${activeQuickFilter === "recruiter" ? "bg-blue-600 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-200"}`}
-                >
-                  Recruiter
-                </button>
-                <button 
-                  onClick={() => {
-                    setActiveQuickFilter("gender");
-                    setQuickFilterValue("");
-                  }} 
-                  className={`px-3 py-1.5 rounded-lg text-sm transition-all ${activeQuickFilter === "gender" ? "bg-blue-600 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-200"}`}
-                >
-                  Gender
-                </button>
-                <button 
-                  onClick={() => {
-                    setActiveQuickFilter("designation");
-                    setQuickFilterValue("");
-                  }} 
-                  className={`px-3 py-1.5 rounded-lg text-sm transition-all ${activeQuickFilter === "designation" ? "bg-blue-600 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-200"}`}
-                >
-                  Designation
-                </button>
-                <button 
-                  onClick={() => {
-                    setActiveQuickFilter("clientName");
-                    setQuickFilterValue("");
-                  }} 
-                  className={`px-3 py-1.5 rounded-lg text-sm transition-all ${activeQuickFilter === "clientName" ? "bg-blue-600 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-200"}`}
-                >
-                  Client Name
-                </button>
-                <button 
-                  onClick={() => {
-                    setActiveQuickFilter("status");
-                    setQuickFilterValue("");
-                  }} 
-                  className={`px-3 py-1.5 rounded-lg text-sm transition-all ${activeQuickFilter === "status" ? "bg-blue-600 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-200"}`}
-                >
-                  Status
-                </button>
-                <button 
-                  onClick={() => {
-                    setActiveQuickFilter("tags");
-                    setQuickFilterValue("");
-                    setQuickFilterTagSearch("");
-                  }} 
-                  className={`px-3 py-1.5 rounded-lg text-sm transition-all ${activeQuickFilter === "tags" ? "bg-blue-600 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-200"}`}
-                >
-                  Tags
-                </button>
+                <button onClick={() => { setActiveQuickFilter("recruiter"); setQuickFilterValue(""); }} className={`px-3 py-1.5 rounded-lg text-sm transition-all ${activeQuickFilter === "recruiter" ? "bg-blue-600 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-200"}`}>Recruiter</button>
+                <button onClick={() => { setActiveQuickFilter("gender"); setQuickFilterValue(""); }} className={`px-3 py-1.5 rounded-lg text-sm transition-all ${activeQuickFilter === "gender" ? "bg-blue-600 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-200"}`}>Gender</button>
+                <button onClick={() => { setActiveQuickFilter("designation"); setQuickFilterValue(""); }} className={`px-3 py-1.5 rounded-lg text-sm transition-all ${activeQuickFilter === "designation" ? "bg-blue-600 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-200"}`}>Designation</button>
+                <button onClick={() => { setActiveQuickFilter("clientName"); setQuickFilterValue(""); }} className={`px-3 py-1.5 rounded-lg text-sm transition-all ${activeQuickFilter === "clientName" ? "bg-blue-600 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-200"}`}>Client Name</button>
+                <button onClick={() => { setActiveQuickFilter("status"); setQuickFilterValue(""); }} className={`px-3 py-1.5 rounded-lg text-sm transition-all ${activeQuickFilter === "status" ? "bg-blue-600 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-200"}`}>Status</button>
+                <button onClick={() => { setActiveQuickFilter("tags"); setQuickFilterValue(""); setQuickFilterTagSearch(""); }} className={`px-3 py-1.5 rounded-lg text-sm transition-all ${activeQuickFilter === "tags" ? "bg-blue-600 text-white" : "bg-gray-700 hover:bg-gray-600 text-gray-200"}`}>Tags</button>
               </div>
 
-              {/* Quick Filter Selection UI */}
               {activeQuickFilter === "tags" && (
                 <div className="mt-3">
-                  <input
-                    type="text"
-                    placeholder="Search tags..."
-                    value={quickFilterTagSearch}
-                    onChange={(e) => setQuickFilterTagSearch(e.target.value)}
-                    className="w-full p-2 rounded bg-gray-800 text-white border border-gray-600"
-                  />
+                  <input type="text" placeholder="Search tags..." value={quickFilterTagSearch} onChange={(e) => setQuickFilterTagSearch(e.target.value)} className="w-full p-2 rounded bg-gray-800 text-white border border-gray-600" />
                   {quickFilterTagSearch && (
                     <div className="max-h-40 overflow-y-auto mt-2 border border-gray-600 rounded bg-gray-800">
                       {filteredQuickTags.length > 0 ? (
                         filteredQuickTags.map(tag => (
-                          <div
-                            key={tag}
-                            onClick={() => {
-                              setQuickFilterValue(tag);
-                              setQuickFilterTagSearch("");
-                            }}
-                            className="p-2 cursor-pointer hover:bg-gray-700"
-                          >
-                            {tag}
-                          </div>
+                          <div key={tag} onClick={() => { setQuickFilterValue(tag); setQuickFilterTagSearch(""); }} className="p-2 cursor-pointer hover:bg-gray-700">{tag}</div>
                         ))
                       ) : (
                         <div className="p-2 text-gray-400 text-sm">No tags found</div>
@@ -1717,11 +1897,7 @@ onChange={(e) => {
 
               {activeQuickFilter && activeQuickFilter !== "tags" && (
                 <div className="mt-3">
-                  <select
-                    value={quickFilterValue}
-                    onChange={(e) => setQuickFilterValue(e.target.value)}
-                    className="border border-gray-600 bg-gray-800 text-white rounded-lg p-2 w-full text-sm"
-                  >
+                  <select value={quickFilterValue} onChange={(e) => setQuickFilterValue(e.target.value)} className="border border-gray-600 bg-gray-800 text-white rounded-lg p-2 w-full text-sm">
                     <option value="">Select {activeQuickFilter === "recruiter" ? "Recruiter" : activeQuickFilter === "gender" ? "Gender" : activeQuickFilter === "designation" ? "Designation" : activeQuickFilter === "status" ? "Status" : "Client Name"}</option>
                     {(activeQuickFilter === "recruiter" ? recruiterOptions : 
                       activeQuickFilter === "gender" ? genderOptions : 
@@ -1759,11 +1935,7 @@ onChange={(e) => {
                     </select>
                   )}
                   
-                  <select 
-                    value={filter.field} 
-                    onChange={(e) => handleFilterChange(filter.id, "field", e.target.value)} 
-                    className="border border-gray-600 bg-gray-800 text-white rounded-lg p-2 w-full mb-2 text-sm"
-                  >
+                  <select value={filter.field} onChange={(e) => handleFilterChange(filter.id, "field", e.target.value)} className="border border-gray-600 bg-gray-800 text-white rounded-lg p-2 w-full mb-2 text-sm">
                     <option value="">Select Field</option>
                     <option value="name">Name</option>
                     <option value="status">Status</option>
@@ -1782,13 +1954,7 @@ onChange={(e) => {
                     <option value="createdAt">Created At</option>
                   </select>
                   
-                  <input 
-                    type="text" 
-                    placeholder="Enter value" 
-                    value={filter.value} 
-                    onChange={(e) => handleFilterChange(filter.id, "value", e.target.value)} 
-                    className="border border-gray-600 bg-gray-800 text-white rounded-lg p-2 w-full text-sm placeholder-gray-400" 
-                  />
+                  <input type="text" placeholder="Enter value" value={filter.value} onChange={(e) => handleFilterChange(filter.id, "value", e.target.value)} className="border border-gray-600 bg-gray-800 text-white rounded-lg p-2 w-full text-sm placeholder-gray-400" />
                 </div>
               ))}
               <button onClick={addFilter} className="text-blue-400 hover:text-blue-500 text-sm font-medium flex items-center gap-1">+ Add Filter Condition</button>
@@ -1814,12 +1980,7 @@ onChange={(e) => {
               Close
             </button>
             <div className="h-full overflow-y-auto">
-              <CandidateFormPage
-               onSuccess={async () => {
-  await loadData();
-  setShowAddPopup(false);
-}}
-              />
+              <CandidateFormPage onSuccess={async () => { await loadData(); }} />
             </div>
           </div>
         </div>
@@ -1833,7 +1994,11 @@ onChange={(e) => {
             <div className="p-6">
               <h2 className="text-xl font-semibold mb-4">Candidate Details</h2>
               <div className="grid grid-cols-2 gap-4 text-sm">
-                <p><span className="font-medium">Status:</span> {selectedCandidate.status ? <span className={`inline-flex px-2 py-0.5 rounded-full text-xs ${getStatusBadgeStyle(selectedCandidate.status)}`}>{selectedCandidate.status}</span> : "—"}</p>
+                <p><span className="font-medium">Status:</span> {(() => {
+                  const latestStatus = getLatestClientStatus(selectedCandidate);
+                  const displayStatus = latestStatus || selectedCandidate.status;
+                  return displayStatus ? <span className={`inline-flex px-2 py-0.5 rounded-full text-xs ${getClientStatusStyle(displayStatus)}`}>{displayStatus}</span> : "—";
+                })()}</p>
                 <p><span className="font-medium">Name:</span> {selectedCandidate.firstName} {selectedCandidate.lastName}</p>
                 <p><span className="font-medium">Email:</span> {selectedCandidate.email}</p>
                 <p><span className="font-medium">Phone:</span> {selectedCandidate.phone}</p>
@@ -1864,6 +2029,7 @@ onChange={(e) => {
                           {client.process && <p><span className="font-medium">Process:</span> {client.process}</p>}
                           {client.processLOB && <p><span className="font-medium">LOB:</span> {client.processLOB}</p>}
                           {client.salary && <p><span className="font-medium">Salary:</span> {client.salary}</p>}
+                          {client.clientStatus && <p><span className="font-medium">Client Status:</span> {client.clientStatus}</p>}
                           {client.hrRemark && <p className="col-span-2"><span className="font-medium">Remark:</span> {client.hrRemark}</p>}
                         </div>
                       </div>
@@ -1904,8 +2070,40 @@ onChange={(e) => {
                           <span className="text-sm">{file.name}</span>
                         </div>
                         <div className="flex gap-2">
-                          <button onClick={() => previewFileHandler(file)} className="px-3 py-1 bg-green-500 text-white rounded text-xs">Preview</button>
-                          <button onClick={() => downloadFile(file)} className="px-3 py-1 bg-blue-500 text-white rounded text-xs">Download</button>
+                          <button onClick={async () => {
+                            const full = await getFullCandidate(editCandidate._id);
+
+                            const fullFile = full.attachments?.find(
+                              f =>
+                                f.id === file.id ||
+                                f.name === file.name ||
+                                f.uploadedAt === file.uploadedAt
+                            );
+
+                            if (!fullFile || !fullFile.data) {
+                              alert("Preview not available ❌");
+                              return;
+                            }
+
+                            previewFileHandler(fullFile);
+                          }} className="px-3 py-1 bg-green-500 text-white rounded text-xs">Preview</button>
+                          <button onClick={async () => {
+                            const full = await getFullCandidate(editCandidate._id);
+
+                            const fullFile = full.attachments?.find(
+                              f =>
+                                f.id === file.id ||
+                                f.name === file.name ||
+                                f.uploadedAt === file.uploadedAt
+                            );
+
+                            if (!fullFile || !fullFile.data) {
+                              alert("Download not available ❌");
+                              return;
+                            }
+
+                            downloadFile(fullFile);
+                          }} className="px-3 py-1 bg-blue-500 text-white rounded text-xs">Download</button>
                         </div>
                       </div>
                     ))}

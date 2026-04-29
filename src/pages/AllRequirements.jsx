@@ -9,7 +9,6 @@ const AllRequirements = () => {
   const [filteredRequirements, setFilteredRequirements] = useState([]);
   const [editDynamicFields, setEditDynamicFields] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const [editingRequirementId, setEditingRequirementId] = useState(null);
   const [editFormData, setEditFormData] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -21,20 +20,17 @@ const AllRequirements = () => {
   const [selectedNotes, setSelectedNotes] = useState("");
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedRequirement, setSelectedRequirement] = useState(null);
-  
-  // ================== ADD NEW REQUIREMENT POPUP STATE ==================
   const [showAddPopup, setShowAddPopup] = useState(false);
-  
-  // ✅ EDIT POPUP STATE
   const [showEditPopup, setShowEditPopup] = useState(false);
-  
-  // ✅ STATUS FILTER STATE
   const [statusFilter, setStatusFilter] = useState("");
-  
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const savedTheme = localStorage.getItem("theme");
     return savedTheme ? savedTheme === "dark" : true;
   });
+  const [isLoading, setIsLoading] = useState(false); // ✅ Keep but don't block UI
+
+  // Cache configuration
+  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
   // Current user and role checks
   const currentUser = JSON.parse(localStorage.getItem("currentUser"));
@@ -43,27 +39,137 @@ const AllRequirements = () => {
   const isEmployee = currentUser?.role === "employee";
   const canEditDelete = isAdmin || isManager;
   const canViewSensitive = isAdmin || isManager;
-
-  // ================== PERMISSION-BASED ADD NEW BUTTON ==================
   const canAddRequirement = isAdmin || currentUser?.permissions?.newRequirement === true;
 
-  // Load dynamic fields from /form-fields API
+  // ✅ OPTIMIZED: Load dynamic fields with cache
   const loadDynamicFields = async () => {
     try {
+      // Check cache first
+      const cached = localStorage.getItem("dynamicFieldsCache");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const isFresh = Date.now() - parsed.timestamp < CACHE_DURATION;
+        if (isFresh && parsed.data?.length > 0) {
+          console.log("⚡ Using cached dynamic fields");
+          setAllDynamicFields(parsed.data);
+          return;
+        }
+      }
+
+      // Fetch fresh if needed
       const res = await api.get("/form-fields");
       setAllDynamicFields(res.data);
+      
+      // Save to cache with timestamp
+      localStorage.setItem("dynamicFieldsCache", JSON.stringify({
+        data: res.data,
+        timestamp: Date.now()
+      }));
     } catch (err) {
       console.error("Error loading dynamic fields:", err);
-      setAllDynamicFields([]);
+      // Fallback to cache even if expired
+      const cached = localStorage.getItem("dynamicFieldsCache");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        setAllDynamicFields(parsed.data || []);
+      }
     }
   };
 
+  // ✅ OPTIMIZED: Load requirements with cache and expiry check
+  const loadRequirements = async (forceRefresh = false) => {
+    setIsLoading(true);
+    try {
+      // ✅ 1. Check cache first (with expiry)
+      if (!forceRefresh) {
+        const cached = localStorage.getItem("requirementsCache");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          const isFresh = Date.now() - parsed.timestamp < CACHE_DURATION;
+          
+          if (isFresh && parsed.data?.length > 0) {
+            console.log("⚡ Using fresh cache - API call skipped");
+         setRequirements(parsed.data);
+            setIsLoading(false);
+            return; // 🚀 Skip API call completely!
+          } else if (parsed.data?.length > 0) {
+            console.log("⚡ Using expired cache - will update in background");
+           setRequirements(parsed.data);
+          }
+        }
+      }
+      
+      // ✅ 2. Fetch fresh data in background
+      console.log("🔄 Fetching fresh requirements from API");
+      const res = await api.get("/requirements?limit=100");
+      const processedRequirements = (res.data || []).map(req => ({
+        ...req,
+        requirementStatus: req.requirementStatus || "Open",
+        clientLocation: req.clientLocation || req.recruiterLocation || "",
+        fileUploads: (req.fileUploads || []).map(file => ({
+  name: file.name,
+  type: file.type,
+  url: file.url
+}))
+      }));
+      
+setRequirements(processedRequirements);
+      
+      // ✅ 3. Save to cache with timestamp
+      localStorage.setItem("requirementsCache", JSON.stringify({
+        data: processedRequirements,
+        timestamp: Date.now()
+      }));
+      console.log("✅ Requirements cached with", processedRequirements.length, "items");
+      
+    } catch (error) {
+      console.error("Error loading requirements:", error);
+      
+      // If no cache and error, set empty array
+      const cached = localStorage.getItem("requirementsCache");
+      if (!cached) {
+        setRequirements([]);
+        setFilteredRequirements([]);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // ✅ OPTIMIZED: Single effect for initial load
   useEffect(() => {
-    loadRequirements();
-    loadDynamicFields();
+    // Load from cache immediately (if exists)
+    const cached = localStorage.getItem("requirementsCache");
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (parsed.data?.length > 0) {
+setRequirements(parsed.data);
+        }
+      } catch(e) {}
+    }
+    
+    // Load dynamic fields from cache
+    const cachedFields = localStorage.getItem("dynamicFieldsCache");
+    if (cachedFields) {
+      try {
+        const parsed = JSON.parse(cachedFields);
+        if (parsed.data?.length > 0) {
+          setAllDynamicFields(parsed.data);
+        }
+      } catch(e) {}
+    }
+    
+    // Fetch fresh data in background (doesn't block UI)
+    const timer = setTimeout(() => {
+      loadRequirements();
+      loadDynamicFields();
+    }, 100);
+    
+    return () => clearTimeout(timer);
   }, []);
 
-  // Filter requirements whenever search term or requirements change
+  // ✅ OPTIMIZED: Filtering effect - only runs when requirements or filters change
   useEffect(() => {
     let data = [...requirements];
 
@@ -90,34 +196,19 @@ const AllRequirements = () => {
     setFilteredRequirements(data);
   }, [searchTerm, requirements, statusFilter]);
 
-  const loadRequirements = async () => {
-    setIsLoading(true);
-    try {
-      const res = await api.get("/requirements");
-      const processedRequirements = (res.data || []).map(req => ({
-        ...req,
-        requirementStatus: req.requirementStatus || "Open",
-        clientLocation: req.clientLocation || req.recruiterLocation || "",
-        fileUploads: (req.fileUploads || []).map(file => ({
-          ...file,
-          data: file.data || file.fileData || file.content,
-          url: file.url || (file.data ? `data:${file.type || 'application/octet-stream'};base64,${file.data}` : null)
-        }))
-      }));
-      setRequirements(processedRequirements);
-      setFilteredRequirements(processedRequirements);
-    } catch (error) {
-      console.error("Error loading requirements:", error);
-    } finally {
-      setIsLoading(false);
-    }
+  // ✅ Manual refresh with force option
+  const handleRefresh = () => {
+    console.log("🔄 Manual refresh - clearing cache");
+    localStorage.removeItem("requirementsCache");
+    loadRequirements(true);
   };
 
   const deleteRequirement = async () => {
     if (!requirementToDelete) return;
     try {
       await api.delete(`/delete-requirement/${requirementToDelete._id || requirementToDelete.id}`);
-      await loadRequirements();
+      localStorage.removeItem("requirementsCache"); // Clear cache on delete
+      await loadRequirements(true);
       setShowDeleteModal(false);
       setRequirementToDelete(null);
     } catch (error) {
@@ -135,14 +226,14 @@ const AllRequirements = () => {
       const updateData = { ...safeData, requirementStatus: newStatus, updatedAt: new Date().toISOString() };
 
       await api.put(`/update-requirement/${requirementId}`, updateData);
-      await loadRequirements();
+      localStorage.removeItem("requirementsCache"); // Clear cache on update
+      await loadRequirements(true);
     } catch (error) {
       console.error("Error updating status:", error);
       alert("Failed to update status.");
     }
   };
 
-  // ✅ MODIFIED: startEditRequirement - OPEN POPUP
   const startEditRequirement = (req) => {
     setEditDynamicFields(
       allDynamicFields.map(field => ({
@@ -171,14 +262,6 @@ const AllRequirements = () => {
     setShowEditPopup(true);
   };
 
-  const cancelEdit = () => {
-    setEditingRequirementId(null);
-    setEditFormData(null);
-    setEditDynamicFields([]);
-    setShowEditPopup(false);
-  };
-
-  // ✅ MODIFIED: Close popup after save
   const saveEditedRequirement = async (requirementId) => {
     if (!editFormData) return;
 
@@ -201,7 +284,8 @@ const AllRequirements = () => {
       });
 
       await api.put(`/update-requirement/${requirementId}`, updateData);
-      await loadRequirements();
+      localStorage.removeItem("requirementsCache"); // Clear cache on update
+      await loadRequirements(true);
       setEditingRequirementId(null);
       setEditFormData(null);
       setEditDynamicFields([]);
@@ -345,54 +429,41 @@ const AllRequirements = () => {
     setShowDetailsModal(true);
   };
 
-  // Theme styles with black background
-  const themeStyles = {
-    background: "bg-black",
-    text: "text-gray-100",
-    secondaryText: "text-gray-400",
-    card: "bg-gray-900 border-gray-800",
-    border: "border-gray-800",
-    input: "bg-gray-800 border-gray-700 text-gray-100 focus:ring-blue-500 focus:border-blue-500 placeholder:text-gray-500",
-    tableHeader: "bg-gray-900",
-    tableRow: "border-gray-800 hover:bg-gray-900/50",
-    button: "bg-blue-600 hover:bg-blue-700",
-    buttonSecondary: "bg-gray-700 hover:bg-gray-600",
-    buttonSuccess: "bg-emerald-600 hover:bg-emerald-700",
-    buttonDanger: "bg-red-600 hover:bg-red-700",
-    buttonAdd: "bg-blue-600 hover:bg-blue-700",
+  // Get cache age for display
+  const getCacheAge = () => {
+    try {
+      const cached = localStorage.getItem("requirementsCache");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const ageSeconds = Math.round((Date.now() - parsed.timestamp) / 1000);
+        if (ageSeconds < 60) return `${ageSeconds} seconds`;
+        if (ageSeconds < 3600) return `${Math.round(ageSeconds / 60)} minutes`;
+        return `${Math.round(ageSeconds / 3600)} hours`;
+      }
+    } catch(e) {}
+    return null;
   };
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4" />
-          <p className="text-gray-400">Loading requirements...</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-black text-gray-100">
-      <div className="max-w-[1600px] mx-auto px-6 py-8">
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 w-full">
             <div>
               <h1 className="text-2xl font-semibold text-white">Requirements</h1>
               <p className="text-sm text-gray-400 mt-1">
                 {isEmployee ? "View assigned requirements" : "Manage client requirements"}
               </p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
               <div className="relative">
                 <input
                   type="text"
                   placeholder="Search..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="bg-gray-800 border border-gray-700 text-gray-100 rounded-lg pl-10 pr-4 py-2 w-72 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-gray-500"
+                  className="bg-gray-800 border border-gray-700 text-gray-100 rounded-lg pl-10 pr-4 py-2 w-full sm:w-72 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder:text-gray-500"
                 />
                 <svg className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -403,10 +474,20 @@ const AllRequirements = () => {
                   Clear
                 </button>
               )}
+              <button
+                onClick={handleRefresh}
+                className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm transition-all flex items-center gap-2"
+                title="Refresh data"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh
+              </button>
               {canAddRequirement && (
                 <button
                   onClick={() => setShowAddPopup(true)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all shadow-lg"
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all shadow-lg w-full sm:w-auto"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -416,6 +497,15 @@ const AllRequirements = () => {
               )}
             </div>
           </div>
+          
+          {/* Cache status indicator */}
+          {localStorage.getItem("requirementsCache") && (
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-xs text-green-400 bg-green-500/10 px-2 py-1 rounded-full">
+                ⚡ Cached data (updated {getCacheAge()} ago)
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Active Filter Badge */}
@@ -428,9 +518,17 @@ const AllRequirements = () => {
           </div>
         )}
 
+        {/* Small loading indicator (non-blocking) */}
+        {isLoading && requirements.length === 0 && (
+          <div className="mb-4 flex items-center justify-center py-4">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500 mr-2" />
+            <p className="text-xs text-gray-400">Loading requirements...</p>
+          </div>
+        )}
+
         {/* Stats Cards - Clickable */}
         {!isEmployee && filteredRequirements.length > 0 && (
-          <div className="grid grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div 
               onClick={() => setStatusFilter("")}
               className={`bg-gray-900 rounded-lg p-4 border border-gray-800 shadow-sm cursor-pointer hover:scale-105 transition-all duration-200 ${
@@ -480,7 +578,7 @@ const AllRequirements = () => {
         )}
 
         {/* Table */}
-        {filteredRequirements.length === 0 ? (
+        {filteredRequirements.length === 0 && requirements.length === 0 && !isLoading ? (
           <div className="bg-gray-900 rounded-lg border border-gray-800 shadow-sm p-12 text-center">
             <div className="text-5xl mb-4 text-gray-600">📋</div>
             <p className="text-gray-400">No requirements found</p>
@@ -489,6 +587,14 @@ const AllRequirements = () => {
                 Add Requirement
               </button>
             )}
+          </div>
+        ) : filteredRequirements.length === 0 && requirements.length > 0 ? (
+          <div className="bg-gray-900 rounded-lg border border-gray-800 shadow-sm p-12 text-center">
+            <div className="text-5xl mb-4 text-gray-600">🔍</div>
+            <p className="text-gray-400">No requirements match your search</p>
+            <button onClick={clearSearch} className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm transition-all">
+              Clear Search
+            </button>
           </div>
         ) : (
           <div className="bg-gray-900 rounded-lg border border-gray-800 shadow-sm overflow-hidden">
@@ -656,26 +762,26 @@ const AllRequirements = () => {
         )}
       </div>
 
-      {/* ================== MODALS WITH BLACK BACKGROUND ================== */}
+      {/* ================== MODALS (same as before - kept unchanged) ================== */}
 
-      {/* Add Requirement Modal - BLACK BACKGROUND */}
+      {/* Add Requirement Modal */}
       {showAddPopup && (
-        <div className="fixed inset-0 bg-black/95 flex justify-center items-center z-50 p-4">
-          <div className="w-full max-w-4xl h-[85vh] bg-black rounded-lg shadow-2xl overflow-hidden relative border border-gray-800">
+        <div className="fixed inset-0 bg-black/70 flex justify-center items-start z-50 p-2 sm:p-4 overflow-y-auto">
+          <div className="w-full sm:max-w-4xl bg-gray-900 rounded-lg shadow-2xl relative border border-blue-900 mt-4">
             <button 
               onClick={() => setShowAddPopup(false)} 
-              className="absolute top-4 right-4 z-10 px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm transition-all"
+              className="absolute top-3 right-3 z-10 px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded text-sm"
             >
               Close
             </button>
-            <div className="h-full overflow-y-auto p-6 pt-16">
+            <div className="p-4 sm:p-6 pt-14 max-h-[90vh] overflow-y-auto">
               <RequirementFormPage />
             </div>
           </div>
         </div>
       )}
 
-      {/* Edit Popup - BLACK BACKGROUND */}
+      {/* Edit Popup */}
       {showEditPopup && editFormData && (
         <div className="fixed inset-0 bg-black/95 flex justify-center items-center z-50 p-4">
           <div className="w-full max-w-4xl bg-black rounded-lg shadow-2xl overflow-y-auto max-h-[90vh] border border-gray-800">
@@ -899,7 +1005,7 @@ const AllRequirements = () => {
         </div>
       )}
 
-      {/* Details Modal - BLACK BACKGROUND */}
+      {/* Details Modal */}
       {showDetailsModal && selectedRequirement && (
         <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-50 p-4">
           <div className="bg-black rounded-lg shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-hidden border border-gray-800">
@@ -941,7 +1047,7 @@ const AllRequirements = () => {
         </div>
       )}
 
-      {/* Attachments Modal - BLACK BACKGROUND */}
+      {/* Attachments Modal */}
       {showAttachmentsModal && selectedRequirementAttachments && (
         <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-50 p-4">
           <div className="bg-black rounded-lg shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden border border-gray-800">
@@ -968,7 +1074,7 @@ const AllRequirements = () => {
         </div>
       )}
 
-      {/* Delete Modal - BLACK BACKGROUND */}
+      {/* Delete Modal */}
       {showDeleteModal && requirementToDelete && (
         <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-50 p-4">
           <div className="bg-black rounded-lg shadow-2xl max-w-md w-full p-6 border border-gray-800">
@@ -989,7 +1095,7 @@ const AllRequirements = () => {
         </div>
       )}
 
-      {/* Notes Modal - BLACK BACKGROUND */}
+      {/* Notes Modal */}
       {showNotesModal && (
         <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-50 p-4">
           <div className="bg-black rounded-lg shadow-2xl max-w-lg w-full border border-gray-800">

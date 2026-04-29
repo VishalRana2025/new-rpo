@@ -42,6 +42,9 @@ const AdminDashboard = () => {
     allCandidates: false
   });
 
+  // Cache configuration
+  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
   // Security check - Must be admin to access this page
   const user = JSON.parse(localStorage.getItem("currentUser"));
   const isAdmin = user?.role === "admin";
@@ -63,32 +66,60 @@ const AdminDashboard = () => {
     );
   }
 
-  useEffect(() => {
-    const storedUser = JSON.parse(localStorage.getItem("currentUser"));
-    const userRole = localStorage.getItem("role");
-    
-    if (!storedUser) {
-      navigate("/login");
-      return;
-    }
-    
-    if (userRole !== "admin") {
-      alert("Access denied! Only admins can access this page.");
-      navigate("/employee");
-      return;
-    }
-    
-    setCurrentUser(storedUser);
-    loadData();
-    
-  }, [navigate]);
-
-  const loadData = async () => {
+  // ✅ OPTIMIZED: Load from cache first, then fetch fresh
+  const loadData = async (forceRefresh = false) => {
     setLoading(true);
+    
+    // ✅ 1. Load from cache first (if not force refresh)
+    if (!forceRefresh) {
+      const cached = localStorage.getItem("adminCache");
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          const isFresh = Date.now() - parsed.timestamp < CACHE_DURATION;
+          
+          if (isFresh && parsed.users?.length > 0) {
+            console.log("⚡ Using fresh admin cache - API call skipped");
+            setUsers(parsed.users);
+            setRequirements(parsed.requirements || []);
+            setLoginHistory(parsed.loginHistory || []);
+            setMainAdmin(parsed.mainAdmin || null);
+            
+            // Initialize temp permissions from cached users
+            const initialTempPerms = {};
+            parsed.users.forEach((user) => {
+              initialTempPerms[user._id] = { ...user.permissions };
+            });
+            setTempPermissions(initialTempPerms);
+            
+            setLoading(false);
+            return; // 🚀 Skip API call completely!
+          } else if (parsed.users?.length > 0) {
+            console.log("⚡ Using expired cache - will update in background");
+            setUsers(parsed.users);
+            setRequirements(parsed.requirements || []);
+            setLoginHistory(parsed.loginHistory || []);
+            setMainAdmin(parsed.mainAdmin || null);
+            
+            // Initialize temp permissions from cached users
+            const initialTempPerms = {};
+            parsed.users.forEach((user) => {
+              initialTempPerms[user._id] = { ...user.permissions };
+            });
+            setTempPermissions(initialTempPerms);
+          }
+        } catch (e) {
+          console.error("Error parsing cache:", e);
+        }
+      }
+    }
+    
+    // ✅ 2. Fetch fresh data in background
     try {
+      console.log("🔄 Fetching fresh admin data from API");
       const usersRes = await api.get("/users");
-      const reqRes = await api.get("/requirements");
-      const historyRes = await api.get("/login-history");
+      const reqRes = await api.get("/requirements?limit=50"); // ✅ Reduced limit
+      const historyRes = await api.get("/login-history?limit=100"); // ✅ Reduced limit
 
       const sortedUsers = usersRes.data.sort((a, b) => {
         const dateA = a.createdAt ? new Date(a.createdAt) : new Date(parseInt(a._id.substring(0, 8), 16) * 1000);
@@ -127,12 +158,23 @@ const AdminDashboard = () => {
       const firstAdmin = sortedAdmins[0];
       setMainAdmin(firstAdmin);
       
-      // ✅ FIX 1: Use userId as key instead of array index
+      // Initialize temp permissions
       const initialTempPerms = {};
       usersWithPermissions.forEach((user) => {
         initialTempPerms[user._id] = { ...user.permissions };
       });
       setTempPermissions(initialTempPerms);
+      
+      // ✅ 3. Save to cache
+      const cacheData = {
+        users: usersWithPermissions,
+        requirements: reqRes.data,
+        loginHistory: historyRes.data,
+        mainAdmin: firstAdmin,
+        timestamp: Date.now()
+      };
+      localStorage.setItem("adminCache", JSON.stringify(cacheData));
+      console.log("✅ Admin data cached with", usersWithPermissions.length, "users");
       
     } catch (err) {
       console.error("Error loading data:", err);
@@ -141,6 +183,68 @@ const AdminDashboard = () => {
       setLoading(false);
     }
   };
+
+  // ✅ OPTIMIZED: Clear cache on data mutations
+  const clearCache = () => {
+    localStorage.removeItem("adminCache");
+    console.log("🗑️ Admin cache cleared");
+  };
+
+  // ✅ OPTIMIZED: Load cache first, then fetch fresh
+  useEffect(() => {
+    const storedUser = JSON.parse(localStorage.getItem("currentUser"));
+    const userRole = localStorage.getItem("role");
+    
+    if (!storedUser) {
+      navigate("/login");
+      return;
+    }
+    
+    if (userRole !== "admin") {
+      alert("Access denied! Only admins can access this page.");
+      navigate("/employee");
+      return;
+    }
+    
+    setCurrentUser(storedUser);
+    
+    // ✅ Load from cache instantly (if exists)
+    const cached = localStorage.getItem("adminCache");
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (parsed.users?.length > 0) {
+          console.log("⚡ Loading admin cache instantly");
+          setUsers(parsed.users);
+          setRequirements(parsed.requirements || []);
+          setLoginHistory(parsed.loginHistory || []);
+          setMainAdmin(parsed.mainAdmin || null);
+          
+          const initialTempPerms = {};
+          parsed.users.forEach((user) => {
+            initialTempPerms[user._id] = { ...user.permissions };
+          });
+          setTempPermissions(initialTempPerms);
+        }
+      } catch (e) {}
+    }
+    
+    // ✅ Fetch fresh data in background (doesn't block UI)
+  setTimeout(() => {
+  const cached = localStorage.getItem("adminCache");
+
+  if (!cached) {
+    loadData();
+  } else {
+    const parsed = JSON.parse(cached);
+    const isFresh = Date.now() - parsed.timestamp < CACHE_DURATION;
+
+    if (!isFresh) {
+      loadData();
+    }
+  }
+}, 100);
+  }, [navigate]);
 
   const filteredUsers = users.filter((user) => {
     if (!searchTerm.trim()) return true;
@@ -244,7 +348,8 @@ const AdminDashboard = () => {
           permissions: rolePermissions
         });
       }
-      await loadData();
+      clearCache(); // ✅ Clear cache after mutation
+      await loadData(true);
       setShowPermissionModal(false);
       alert(`${selectedRole} permissions updated for all ${usersToUpdate.length} users ✅`);
     } catch (err) {
@@ -255,7 +360,6 @@ const AdminDashboard = () => {
     }
   };
 
-  // ✅ FIX 2: Use userId instead of originalIndex
   const updateTempPermission = (userId, key) => {
     setTempPermissions(prev => ({
       ...prev,
@@ -275,7 +379,8 @@ const AdminDashboard = () => {
         userId: userToSave._id,
         permissions: tempPermissions[userId]
       });
-      await loadData();
+      clearCache(); // ✅ Clear cache after mutation
+      await loadData(true);
       const currentUserData = JSON.parse(localStorage.getItem("currentUser"));
       if (currentUserData && currentUserData._id === userToSave._id) {
         currentUserData.permissions = { ...tempPermissions[userId] };
@@ -301,7 +406,8 @@ const AdminDashboard = () => {
           });
         }
       }
-      await loadData();
+      clearCache(); // ✅ Clear cache after mutation
+      await loadData(true);
       alert("All permissions saved successfully! ✅");
     } catch (err) {
       console.error("Error saving all permissions:", err);
@@ -337,7 +443,8 @@ const AdminDashboard = () => {
         role: newRole,
         permissions: autoPermissions
       });
-      await loadData();
+      clearCache(); // ✅ Clear cache after mutation
+      await loadData(true);
       alert(`✅ Role updated to ${newRole} with auto permissions!`);
     } catch (err) {
       console.error("Error updating role:", err);
@@ -372,7 +479,8 @@ const AdminDashboard = () => {
     try {
       setLoading(true);
       await api.delete(`/users/${userId}`);
-      await loadData();
+      clearCache(); // ✅ Clear cache after mutation
+      await loadData(true);
       alert(`✅ User "${userToDelete?.name || userToDelete?.email}" deleted successfully!`);
     } catch (err) {
       console.error("Error deleting user:", err);
@@ -400,8 +508,9 @@ const AdminDashboard = () => {
       await api.put(`/users/${selectedUser._id}/password`, {
         password: newPassword
       });
+      clearCache(); // ✅ Clear cache after mutation
       alert(`✅ Password updated successfully for ${selectedUser.name || selectedUser.email}!`);
-      await loadData();
+      await loadData(true);
       setShowPasswordModal(false);
       setNewPassword("");
       setSelectedUser(null);
@@ -443,7 +552,8 @@ const AdminDashboard = () => {
       });
       
       if (res.data.success) {
-        await loadData();
+        clearCache(); // ✅ Clear cache after mutation
+        await loadData(true);
         setNewManager({ name: "", email: "", password: "", department: "" });
         setShowManagerModal(false);
         alert(`Manager created successfully! ✅\nEmail: ${newManager.email}\nPassword: ${newManager.password}`);
@@ -462,7 +572,8 @@ const AdminDashboard = () => {
       await api.put(`/users/${userId}/approve`, {
         isApproved: true
       });
-      await loadData();
+      clearCache(); // ✅ Clear cache after mutation
+      await loadData(true);
       alert("User approved successfully! ✅ User can now login.");
     } catch (err) {
       console.error("Error approving user:", err);
@@ -497,7 +608,8 @@ const AdminDashboard = () => {
       await api.put(`/users/${userId}/active`, {
         isActive: newStatus
       });
-      await loadData();
+      clearCache(); // ✅ Clear cache after mutation
+      await loadData(true);
       const status = newStatus ? "Activated" : "Deactivated";
       alert(`✅ User ${status} successfully! ${!newStatus ? "User cannot login now." : "User can now login."}`);
     } catch (err) {
@@ -514,7 +626,8 @@ const AdminDashboard = () => {
     try {
       setLoading(true);
       await api.delete("/login-history");
-      await loadData();
+      clearCache(); // ✅ Clear cache after mutation
+      await loadData(true);
       alert("Login history cleared successfully!");
     } catch (err) {
       console.error("Error clearing history:", err);
@@ -524,7 +637,6 @@ const AdminDashboard = () => {
     }
   };
 
-  // ✅ FIX 3: Updated hasPermissionChanges to use userId
   const hasPermissionChanges = (userId) => {
     const user = users.find(u => u._id === userId);
     const originalPerms = user?.permissions || {};
@@ -532,7 +644,6 @@ const AdminDashboard = () => {
     return JSON.stringify(originalPerms) !== JSON.stringify(currentTempPerms);
   };
 
-  // ✅ FIX 4: Simplified getTempPermsForUser
   const getTempPermsForUser = (userId) => {
     return tempPermissions[userId] || {};
   };
@@ -544,6 +655,21 @@ const AdminDashboard = () => {
     navigate("/login");
   };
 
+  // Get cache age for display
+  const getCacheAge = () => {
+    try {
+      const cached = localStorage.getItem("adminCache");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const ageSeconds = Math.round((Date.now() - parsed.timestamp) / 1000);
+        if (ageSeconds < 60) return `${ageSeconds} seconds`;
+        if (ageSeconds < 3600) return `${Math.round(ageSeconds / 60)} minutes`;
+        return `${Math.round(ageSeconds / 3600)} hours`;
+      }
+    } catch(e) {}
+    return null;
+  };
+
   const totalUsers = users.length;
   const activeUsers = users.filter(u => u.isActive).length;
   const pendingApprovals = users.filter(u => !u.isApproved).length;
@@ -553,7 +679,10 @@ const AdminDashboard = () => {
   const admins = users.filter(u => u.role === "admin").length;
   const isMainAdmin = currentUser?._id === mainAdmin?._id;
 
-  if (loading && users.length === 0) {
+  // Small loading indicator (non-blocking)
+  const showLoading = loading && users.length === 0;
+
+  if (showLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-900 p-4">
         <div className="text-center">
@@ -629,6 +758,20 @@ const AdminDashboard = () => {
               </div>
             </div>
           </div>
+          
+          {/* Cache status indicator */}
+          {localStorage.getItem("adminCache") && (
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-xs text-green-400 bg-green-500/10 px-2 py-1 rounded-full">
+                ⚡ Admin data cached (updated {getCacheAge()} ago)
+              </span>
+              {loading && (
+                <span className="text-xs text-yellow-400 bg-yellow-500/10 px-2 py-1 rounded-full animate-pulse">
+                  🔄 Updating in background...
+                </span>
+              )}
+            </div>
+          )}
         </div>
         
         {isMainAdmin && (
@@ -986,7 +1129,7 @@ const AdminDashboard = () => {
                         <th className="p-3 text-left">Role</th>
                         <th className="p-3 text-left">Login Time</th>
                         <th className="p-3 text-left">IP</th>
-                       </tr>
+                      </tr>
                     </thead>
                     <tbody>
                       {loginHistory.map((log, index) => (
@@ -1014,21 +1157,21 @@ const AdminDashboard = () => {
                             }`}>
                               {log.role || "employee"}
                             </span>
-                            </td>
+                           </td>
                           <td className="p-3">
                             <div className="font-mono text-xs">
                               {log.loginTime}
                             </div>
-                            </td>
+                           </td>
                           <td className="p-3">
                             <span className="font-mono text-xs text-gray-400">
                               {log.ip || "localhost"}
                             </span>
-                            </td>
+                           </td>
                          </tr>
                       ))}
                     </tbody>
-                  </table>
+                   </table>
                 </div>
               )}
               {loginHistory.length > 0 && isMainAdmin && (
