@@ -19,6 +19,8 @@ const app = express();
 app.use(cors({
   origin: [
     "http://localhost:5173",
+        "http://localhost:5174", // ✅ ADD THIS LINE
+
     "https://bdats.eclipticinsight.com",
     "https://ats.eclipticinsight.com"
   ],
@@ -490,6 +492,7 @@ app.delete("/api/users/:userId", async (req, res) => {
 });
 
 // ================== CLIENT APIs ==================
+
 app.post("/api/add-client", async (req, res) => {
   try {
     const saved = await new Client(req.body).save();
@@ -499,13 +502,11 @@ app.post("/api/add-client", async (req, res) => {
   }
 });
 
-app.get("/api/clients", async (req, res) => {
+app.get("/api/candidates", async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 100;
-
-    const data = await Client.find()
+    const data = await Candidate.find()
+      .select("-resume -attachments.data")
       .sort({ createdAt: -1 })
-      .limit(limit)
       .lean();
 
     res.json(data);

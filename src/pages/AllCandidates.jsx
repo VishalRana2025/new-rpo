@@ -511,24 +511,33 @@ setEditCandidate({
   };
 
   const handleDelete = async (id, name) => {
-    const confirmDelete = window.confirm(`Are you sure you want to delete ${name}?`);
-    if (!confirmDelete) return;
+  const confirmDelete = window.confirm(`Are you sure you want to delete ${name}?`);
+  if (!confirmDelete) return;
 
-    try {
-      await api.delete(`/delete-candidate/${id}`, {
-        data: {
-          deletedByName: currentUser?.firstName && currentUser?.lastName
-            ? `${currentUser.firstName} ${currentUser.lastName}`
-            : currentUser?.name || "System"
-        }
-      });
-      await loadData();
-      alert("Candidate deleted successfully!");
-    } catch (err) {
-      console.error(err);
-      alert("Delete failed. Please try again.");
-    }
-  };
+  // ✅ 1. Remove instantly from UI
+  const deletedCandidate = data.find(c => c._id === id);
+  setData(prev => prev.filter(c => c._id !== id));
+
+  try {
+    // ✅ 2. Backend delete
+    await api.delete(`/delete-candidate/${id}`);
+
+    // ✅ 3. Optional background refresh
+    setTimeout(() => {
+      loadData();
+    }, 500);
+
+    alert("Candidate deleted successfully!");
+
+  } catch (err) {
+    console.error(err);
+
+    // ❌ 4. If failed → restore data
+    setData(prev => [...prev, deletedCandidate]);
+
+    alert("Delete failed. Please try again.");
+  }
+};
 
   const fileToBase64 = (file) => {
     return new Promise((resolve, reject) => {
