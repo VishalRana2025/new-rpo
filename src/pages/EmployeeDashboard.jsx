@@ -319,39 +319,53 @@ if (userPermissions.allCandidates) allowed.push("all-candidates");
 };
 
   // Load clients
-  const loadClients = async () => {
-    setIsLoading(true);
-    try {
-      const res = await api.get("/clients");
-      
-      let clientsData = [];
-      
-      if (res.data && Array.isArray(res.data)) {
-        clientsData = res.data;
-      } else if (res.data && Array.isArray(res.data.data)) {
-        clientsData = res.data.data;
-      } else if (res.data && res.data.clients && Array.isArray(res.data.clients)) {
-        clientsData = res.data.clients;
-      } else {
-        clientsData = [];
-        console.warn("Clients API response is not an array:", res.data);
+ const CACHE_KEY = "clientsCache";
+const CACHE_EXPIRY = 30 * 1000;
+
+const loadClients = async () => {
+  setIsLoading(true);
+
+  try {
+    // ✅ 1. Load from cache instantly
+    const cached = localStorage.getItem(CACHE_KEY);
+
+    if (cached) {
+      const parsed = JSON.parse(cached);
+
+      if (Date.now() - parsed.timestamp < CACHE_EXPIRY) {
+        setClients(parsed.data || []);
+        console.log("⚡ Clients loaded from cache");
       }
-      
-      setClients(
-        [...clientsData].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-      );
-    } catch (error) {
-      console.error("Error loading clients:", error);
-      if (error.response?.status === 401 && !isAdminView) {
-        localStorage.removeItem("currentUser");
-        navigate("/login");
-      } else if (!isAdminView) {
-        alert("Failed to load clients. Please check the server.");
-      }
-    } finally {
-      setIsLoading(false);
     }
-  };
+
+    // ✅ 2. Fetch fresh data
+    const res = await api.get("/clients?limit=100");
+
+    let clientsData = Array.isArray(res.data)
+      ? res.data
+      : res.data?.data || res.data?.clients || [];
+
+    const sorted = [...clientsData].sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+    );
+
+    setClients(sorted);
+
+    // ✅ 3. Save cache
+    localStorage.setItem(
+      CACHE_KEY,
+      JSON.stringify({
+        data: sorted,
+        timestamp: Date.now(),
+      })
+    );
+
+  } catch (error) {
+    console.error("Error loading clients:", error);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const createClient = async (clientData) => {
     const dataWithUser = {
@@ -887,6 +901,8 @@ if (userPermissions.allCandidates) allowed.push("all-candidates");
     setIsLoading(true);
     try {
       await removeClientFromServer(id);
+      localStorage.removeItem("clientsCache");
+localStorage.removeItem("dashboardCache");
       setClients((prev) => prev.filter((c) => c._id !== id && c.id !== id));
       if (selectedClient?._id === id || selectedClient?.id === id) resetForm();
       setShowDeleteModal(false);
@@ -1517,7 +1533,7 @@ if (userPermissions.allCandidates) allowed.push("all-candidates");
                 </div>
               </div>
               
-              {isLoading ? (
+              {isLoading && filteredClients.length === 0 ? (
                 <div className="text-center py-12">
                   <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500 mx-auto" />
                   <p className={`mt-4 ${themeStyles.secondaryText}`}>Loading clients...</p>

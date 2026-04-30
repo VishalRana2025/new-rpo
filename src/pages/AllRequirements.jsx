@@ -101,7 +101,7 @@ const AllRequirements = () => {
       
       // ✅ 2. Fetch fresh data in background
       console.log("🔄 Fetching fresh requirements from API");
-      const res = await api.get("/requirements?limit=100");
+      const res = await api.get("/requirements");
       const processedRequirements = (res.data || []).map(req => ({
         ...req,
         requirementStatus: req.requirementStatus || "Open",
@@ -168,7 +168,26 @@ setRequirements(parsed.data);
     
     return () => clearTimeout(timer);
   }, []);
+useEffect(() => {
+  const handleNewRequirement = () => {
+    console.log("🔥 Requirement added → refreshing list");
 
+    // clear cache
+    localStorage.removeItem("requirementsCache");
+
+    // reload data
+    loadRequirements(true);
+
+    // close popup
+    setShowAddPopup(false);
+  };
+
+  window.addEventListener("requirementAdded", handleNewRequirement);
+
+  return () => {
+    window.removeEventListener("requirementAdded", handleNewRequirement);
+  };
+}, []);
   // ✅ OPTIMIZED: Filtering effect - only runs when requirements or filters change
   useEffect(() => {
     let data = [...requirements];

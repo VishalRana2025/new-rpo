@@ -19,8 +19,7 @@ const app = express();
 app.use(cors({
   origin: [
     "http://localhost:5173",
-        "http://localhost:5174", // ✅ ADD THIS LINE
-
+    "http://localhost:5174",
     "https://bdats.eclipticinsight.com",
     "https://ats.eclipticinsight.com"
   ],
@@ -34,11 +33,13 @@ app.options("*", cors());
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use("/api/resume", resumeRoutes);
+
 // ================== FILE UPLOAD ==================
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // Increased to 10MB
 });
+
 // ================== PARSE RESUME API ==================
 const pdfParse = require("pdf-parse");
 
@@ -71,6 +72,7 @@ app.post("/api/parse-resume", upload.single("file"), async (req, res) => {
     res.status(500).json({ error: "Parsing failed" });
   }
 });
+
 // ================== DB ==================
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("✅ MongoDB Connected"))
@@ -491,7 +493,22 @@ app.delete("/api/users/:userId", async (req, res) => {
   }
 });
 
-// ================== CLIENT APIs ==================
+// ================== CLIENT APIs (FIXED) ==================
+
+// ✅ FIX 1: ADD MISSING GET /api/clients endpoint
+app.get("/api/clients", async (req, res) => {
+  try {
+    const clients = await Client.find().sort({ createdAt: -1 }).lean();
+    console.log(`✅ Fetched ${clients.length} clients`);
+    res.json(clients);
+  } catch (err) {
+    console.error("Error fetching clients:", err);
+    res.status(500).json({ 
+      message: "Error fetching clients", 
+      error: err.message 
+    });
+  }
+});
 
 app.post("/api/add-client", async (req, res) => {
   try {
@@ -499,19 +516,6 @@ app.post("/api/add-client", async (req, res) => {
     res.status(201).json(saved);
   } catch (err) {
     res.status(500).json({ message: "Error saving client", error: err.message });
-  }
-});
-
-app.get("/api/candidates", async (req, res) => {
-  try {
-    const data = await Candidate.find()
-      .select("-resume -attachments.data")
-      .sort({ createdAt: -1 })
-      .lean();
-
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
   }
 });
 
@@ -532,7 +536,7 @@ app.delete("/api/delete-client/:id", async (req, res) => {
   }
 });
 
-// ================== REQUIREMENT APIs (WITH ACTIVITY LOGS) ==================
+// ================== REQUIREMENT APIs (FIXED - NO LIMIT) ==================
 
 // ✅ CREATE REQUIREMENT with Activity Log
 app.post("/api/add-requirement", upload.array("files"), async (req, res) => {
@@ -593,20 +597,21 @@ app.post("/api/add-requirement", upload.array("files"), async (req, res) => {
   }
 });
 
+// ✅ FIX 4: GET requirements - NO LIMIT
 app.get("/api/requirements", async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 100;
-
     const data = await Requirement.find()
       .sort({ createdAt: -1 })
-      .limit(limit)
-      .lean();
-
+      .lean(); // No .limit() here!
+    
+    console.log(`✅ Fetched ${data.length} requirements (no limit)`);
     res.json(data);
   } catch (err) {
+    console.error("Error fetching requirements:", err);
     res.status(500).json({ error: err.message });
   }
 });
+
 // ✅ UPDATE REQUIREMENT with Activity Log
 app.put("/api/update-requirement/:id", async (req, res) => {
   try {
@@ -748,7 +753,23 @@ app.delete("/api/login-history", async (req, res) => {
   }
 });
 
-// ================== CANDIDATE APIs ==================
+// ================== CANDIDATE APIs (FIXED - SINGLE VERSION, NO LIMIT) ==================
+
+// ✅ SINGLE CANDIDATE API - NO LIMIT (FIXED)
+app.get("/api/candidates", async (req, res) => {
+  try {
+    const data = await Candidate.find()
+      .select("-resume -attachments.data")
+      .sort({ createdAt: -1 })
+      .lean(); // No .limit() here!
+    
+    console.log(`✅ Fetched ${data.length} candidates (no limit)`);
+    res.json(data);
+  } catch (err) {
+    console.error("Error fetching candidates:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // GET SINGLE CANDIDATE BY ID
 app.get("/api/candidates/:id", async (req, res) => {
@@ -764,125 +785,7 @@ app.get("/api/candidates/:id", async (req, res) => {
   }
 });
 
-// GET ALL CANDIDATES
-app.get("/api/candidates", async (req, res) => {
-  try {
-const limit = parseInt(req.query.limit) || 100;
-
-const data = await Candidate.find()
-  .select("-resume -attachments.data")
-  .sort({ createdAt: -1 })
-  .limit(limit)
-    .lean(); // 🔥 IMPORTANT
-
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});// ================== ACTIVITY DASHBOARD APIs ==================
-
-// ✅ Chart data with module filter
-app.get("/api/activity-stats", async (req, res) => {
-  try {
-    const days = parseInt(req.query.days) || 30;
-    const module = req.query.module;
-    
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
-
-    let match = {
-      createdAt: { $gte: startDate }
-    };
-    
-    if (module && module !== "all") {
-      match.module = module;
-    }
-
-    const logs = await ActivityLog.find(match)
-  .sort({ createdAt: 1 })
-  .limit(500) // 🔥 VERY IMPORTANT
-  .lean();
-
-    const grouped = {};
-
-    logs.forEach(log => {
-      const date = new Date(log.createdAt).toLocaleDateString("en-GB");
-
-      if (!grouped[date]) {
-        grouped[date] = {
-          CREATE: 0,
-          UPDATE: 0,
-          DELETE: 0
-        };
-      }
-
-      grouped[date][log.action]++;
-    });
-
-    res.json(grouped);
-
-  } catch (err) {
-    console.error("Error in activity-stats:", err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-// ✅ Recent activities
-app.get("/api/recent-activities", async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit) || 100;
-
-    const logs = await ActivityLog.find()
-  .sort({ createdAt: -1 })
-  .limit(limit)
-  .lean(); // 🔥 ADD THIS
-    res.json(logs);
-
-  } catch (err) {
-    console.error("Error in recent-activities:", err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-// ✅ Summary stats
-app.get("/api/activity-summary", async (req, res) => {
-  try {
-    const data = await ActivityLog.aggregate([
-      {
-        $group: {
-          _id: { module: "$module", action: "$action" },
-          count: { $sum: 1 }
-        }
-      }
-    ]);
-
-    const result = {
-      total: { create: 0, update: 0, delete: 0 },
-      candidate: { create: 0, update: 0, delete: 0 },
-      requirement: { create: 0, update: 0, delete: 0 }
-    };
-
-    data.forEach(item => {
-      const { module, action } = item._id;
-      const actionKey = action.toLowerCase();
-
-      result.total[actionKey] += item.count;
-      
-      if (module === "candidate") {
-        result.candidate[actionKey] += item.count;
-      } else if (module === "requirement") {
-        result.requirement[actionKey] += item.count;
-      }
-    });
-
-    res.json(result);
-  } catch (err) {
-    console.error("Error in activity-summary:", err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-// ADD CANDIDATE - FIXED VERSION
+// ADD CANDIDATE
 app.post("/api/add-candidate", async (req, res) => {
   try {
     console.log("📦 Incoming request body keys:", Object.keys(req.body));
@@ -980,7 +883,7 @@ app.post("/api/add-candidate", async (req, res) => {
   }
 });
 
-// UPDATE CANDIDATE - CLEANED VERSION
+// UPDATE CANDIDATE
 app.put("/api/update-candidate/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -1037,20 +940,16 @@ app.put("/api/update-candidate/:id", async (req, res) => {
 
     // ✅ Activity Log (UPDATE)
     await ActivityLog.create({
-  action: "UPDATE",
-  module: "candidate",
-  itemId: id,
-  itemName: updated.firstName + " " + updated.lastName,
-
-  userName: req.body.updatedByName, // ✅ real user only
-
-  // ✅ ADD THESE 2 LINES (VERY IMPORTANT)
-  status: updated.status,
-
-  clientName: updated.clientSections?.length
-    ? updated.clientSections[updated.clientSections.length - 1].clientName
-    : ""
-});
+      action: "UPDATE",
+      module: "candidate",
+      itemId: id,
+      itemName: updated.firstName + " " + updated.lastName,
+      userName: req.body.updatedByName,
+      status: updated.status,
+      clientName: updated.clientSections?.length
+        ? updated.clientSections[updated.clientSections.length - 1].clientName
+        : ""
+    });
 
     res.json({
       success: true,
@@ -1068,13 +967,11 @@ app.put("/api/update-candidate/:id", async (req, res) => {
   }
 });
 
-// DELETE CANDIDATE - CLEANED VERSION
+// DELETE CANDIDATE
 app.delete("/api/delete-candidate/:id", async (req, res) => {
   try {
-    const { id } = req.params; // ✅ ONLY ONE
-
+    const { id } = req.params;
     await Candidate.findByIdAndDelete(id);
-
     res.json({ message: "Deleted successfully" });
   } catch (err) {
     console.log("Delete error:", err);
@@ -1138,6 +1035,109 @@ app.put("/api/form-fields/:id", async (req, res) => {
   }
 });
 
+// ================== ACTIVITY DASHBOARD APIs ==================
+
+// ✅ Chart data with module filter
+app.get("/api/activity-stats", async (req, res) => {
+  try {
+    const days = parseInt(req.query.days) || 30;
+    const module = req.query.module;
+    
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    let match = {
+      createdAt: { $gte: startDate }
+    };
+    
+    if (module && module !== "all") {
+      match.module = module;
+    }
+
+    const logs = await ActivityLog.find(match)
+      .sort({ createdAt: 1 })
+      .limit(500)
+      .lean();
+
+    const grouped = {};
+
+    logs.forEach(log => {
+      const date = new Date(log.createdAt).toLocaleDateString("en-GB");
+
+      if (!grouped[date]) {
+        grouped[date] = {
+          CREATE: 0,
+          UPDATE: 0,
+          DELETE: 0
+        };
+      }
+
+      grouped[date][log.action]++;
+    });
+
+    res.json(grouped);
+
+  } catch (err) {
+    console.error("Error in activity-stats:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ✅ Recent activities
+app.get("/api/recent-activities", async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100;
+
+    const logs = await ActivityLog.find()
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+    res.json(logs);
+
+  } catch (err) {
+    console.error("Error in recent-activities:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ✅ Summary stats
+app.get("/api/activity-summary", async (req, res) => {
+  try {
+    const data = await ActivityLog.aggregate([
+      {
+        $group: {
+          _id: { module: "$module", action: "$action" },
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const result = {
+      total: { create: 0, update: 0, delete: 0 },
+      candidate: { create: 0, update: 0, delete: 0 },
+      requirement: { create: 0, update: 0, delete: 0 }
+    };
+
+    data.forEach(item => {
+      const { module, action } = item._id;
+      const actionKey = action.toLowerCase();
+
+      result.total[actionKey] += item.count;
+      
+      if (module === "candidate") {
+        result.candidate[actionKey] += item.count;
+      } else if (module === "requirement") {
+        result.requirement[actionKey] += item.count;
+      }
+    });
+
+    res.json(result);
+  } catch (err) {
+    console.error("Error in activity-summary:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // ================== BACKEND CACHE ==================
 let dashboardCache = null;
 let lastFetchTime = 0;
@@ -1157,9 +1157,9 @@ app.get("/api/dashboard-fast", async (req, res) => {
     // ✅ 2. FETCH FROM DB
     const [candidates, activities, summary, clients] = await Promise.all([
       Candidate.find()
-  .select("-resume -attachments.data")
-  .limit(100)
-  .lean(),
+        .select("-resume -attachments.data")
+        .limit(100)
+        .lean(),
       ActivityLog.find().limit(100).lean(),
       ActivityLog.aggregate([
         { $group: { _id: "$action", count: { $sum: 1 } } }
@@ -1180,7 +1180,8 @@ app.get("/api/dashboard-fast", async (req, res) => {
     res.status(500).json({ error: "Dashboard error" });
   }
 });
-/// ================== SERVER ==================
+
+// ================== SERVER ==================
 
 app.use((err, req, res, next) => {
   if (err.message === "Request aborted") {
@@ -1200,3 +1201,22 @@ const PORT = process.env.PORT || 5001;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -36,7 +36,7 @@ const Home = () => {
   const [popupData, setPopupData] = useState(null);
 
   // ✅ Cache expiry time (5 minutes)
-  const CACHE_EXPIRY = 5 * 60 * 1000;
+ const CACHE_EXPIRY = 30 * 1000;
 
   // ✅ GROUPING FUNCTION - Groups activities by recruiter/userName
   const groupByUser = (activities) => {
@@ -151,10 +151,10 @@ const Home = () => {
         candidatesRes
       ] = await Promise.all([
         api.get(`/activity-stats?days=${filterDays}&module=candidate`),
-        api.get("/recent-activities?limit=500"),
+        api.get("/recent-activities?limit=100"),
         api.get("/activity-summary"),
         api.get("/clients"),
-        api.get("/candidates")
+       api.get("/candidates?limit=100")
       ]);
 
       const allCandidates = candidatesRes.data || [];
@@ -319,55 +319,36 @@ const Home = () => {
   };
 
   // ✅ FIXED useEffect - LIKE REQUIREMENTS PAGE (with cleaner cache check)
-  useEffect(() => {
-    // 1️⃣ Load cache instantly (ALWAYS show something immediately)
+useEffect(() => {
+  try {
     const cached = localStorage.getItem("dashboardCache");
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        setCreatedData(parsed.createdData || defaultChartData);
-        setUpdatedData(parsed.updatedData || defaultChartData);
-        setRecentActivities(parsed.recentActivities || []);
-        setSummaryStats(parsed.summaryStats || {
-          total: { create: 0, update: 0, delete: 0 },
-          candidate: { create: 0, update: 0, delete: 0 },
-          requirement: { create: 0, update: 0, delete: 0 },
-        });
-        setAllClients(parsed.allClients || []);
-        setOpenClientData(parsed.openClientData || []);
-        setClosedClientData(parsed.closedClientData || []);
-      } catch (e) {}
-    }
-    
-    // 2️⃣ Background API (only if needed - cleaner version)
-    setTimeout(() => {
-      try {
-        const cachedNow = localStorage.getItem("dashboardCache");
-        if (!cachedNow) {
-          // No cache at all - fetch immediately
-          console.log("📭 No cache - fetching from API");
-          loadDashboardData();
-          return;
-        }
-        
-        const parsed = JSON.parse(cachedNow);
-        const isExpired = Date.now() - parsed.timestamp > CACHE_EXPIRY;
-        
-        if (isExpired) {
-          // Cache expired - refresh in background
-          console.log("⏳ Cache expired - refreshing in background");
-          loadDashboardData();
-        } else {
-          console.log("✅ Valid cache exists - NO API call needed");
-        }
-      } catch (e) {
-        // If any error parsing, fetch fresh data
-        console.log("⚠️ Cache parse error - fetching fresh data");
-        loadDashboardData();
-      }
-    }, 100); // Small delay to ensure UI renders first
-  }, [filterDays]);
 
+    if (cached) {
+      const parsed = JSON.parse(cached);
+
+      setCreatedData(parsed.createdData || defaultChartData);
+      setUpdatedData(parsed.updatedData || defaultChartData);
+      setRecentActivities(parsed.recentActivities || []);
+      setSummaryStats(parsed.summaryStats || {
+        total: { create: 0, update: 0, delete: 0 },
+        candidate: { create: 0, update: 0, delete: 0 },
+        requirement: { create: 0, update: 0, delete: 0 },
+      });
+      setAllClients(parsed.allClients || []);
+      setOpenClientData(parsed.openClientData || []);
+      setClosedClientData(parsed.closedClientData || []);
+
+      console.log("⚡ Loaded from cache (NO AUTO REFRESH)");
+    } else {
+      // Only first time (no cache)
+      loadDashboardData();
+    }
+
+  } catch (e) {
+    console.log("⚠️ Cache error → loading fresh data");
+    loadDashboardData();
+  }
+}, [filterDays]);
   // Handle bar click
   const handleBarClick = (data) => {
     if (!data) return;

@@ -12,5 +12,6 @@ const clientSchema = new mongoose.Schema({
   attachments: Array,
   createdBy: String
 }, { timestamps: true });
+clientSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model("Client", clientSchema);

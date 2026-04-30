@@ -6,7 +6,10 @@ const RequirementFormPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [currentUser, setCurrentUser] = useState(null);
-  const [clients, setClients] = useState([]);
+ const [clients, setClients] = useState(() => {
+  const cached = localStorage.getItem("clients");
+  return cached ? JSON.parse(cached) : [];
+});
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const savedTheme = localStorage.getItem("theme");
     return savedTheme ? savedTheme === "dark" : true;
@@ -97,14 +100,16 @@ clientLocation: "",
     try {
       const user = JSON.parse(userStr);
       setCurrentUser(user);
-      loadClients();
+    
     } catch (error) {
       console.error("Error parsing user data:", error);
       localStorage.removeItem("currentUser");
       navigate("/login");
     }
   }, [navigate]);
-
+useEffect(() => {
+  loadClients();   // ✅ load immediately
+}, []);
   // Check if we're editing from navigation state
   useEffect(() => {
     const editData = location.state?.editRequirement;
@@ -113,15 +118,37 @@ clientLocation: "",
     }
   }, [location]);
 
-  const loadClients = async () => {
-    try {
-      const res = await api.get("/clients");
-      setClients(res.data || []);
-    } catch (error) {
-      console.error("Error loading clients:", error);
-    }
-  };
+const loadClients = async () => {
+  try {
+    const cached = localStorage.getItem("clients");
 
+    // ✅ ONLY set if state is empty
+    if (cached && clients.length === 0) {
+      setClients(JSON.parse(cached));
+    }
+
+   const res = await api.get("/clients"); 
+
+    let clientsData = [];
+
+    if (Array.isArray(res.data)) {
+      clientsData = res.data;
+    } else if (Array.isArray(res.data.data)) {
+      clientsData = res.data.data;
+    } else if (Array.isArray(res.data.clients)) {
+      clientsData = res.data.clients;
+    }
+
+    // ✅ update ONLY if data changed
+    if (JSON.stringify(clientsData) !== JSON.stringify(clients)) {
+      setClients(clientsData);
+      localStorage.setItem("clients", JSON.stringify(clientsData));
+    }
+
+  } catch (error) {
+    console.error("Error loading clients:", error);
+  }
+};
   // Add dynamic field
   const addDynamicField = async (type, customLabel, isRequired) => {
     const field = {
@@ -521,13 +548,20 @@ clientLocation: "",
           headers: { "Content-Type": "multipart/form-data" },
         });
         alert("Requirement updated successfully!");
-        navigate("/requirements");
+        navigate("/all-requirements");
       } else {
-        await api.post("/add-requirement", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-        alert("Requirement added successfully!");
-        resetForm();
+await api.post("/add-requirement", formData);
+
+alert("Requirement added successfully!");
+
+// ✅ clear cache
+localStorage.removeItem("requirementsCache");
+
+// ✅ trigger refresh
+window.dispatchEvent(new Event("requirementAdded"));
+
+// ✅ reset form
+resetForm();
       }
       
     } catch (error) {
@@ -922,20 +956,26 @@ clientLocation: "",
                     {getFieldLabel("clientName", "Client Name")}
                     {isFieldRequired("clientName", true, true) && <span className="text-red-500 ml-1">*</span>}
                   </label>
-                  <select
-                    name="clientName"
-                    value={requirementForm.clientName}
-                    onChange={handleInputChange}
-                    required={isFieldRequired("clientName", true, true)}
-                    className={`${themeStyles.input} border p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-500 outline-none`}
-                  >
-                    <option value="">Select Client</option>
-                    {clients.map((client) => (
-                      <option key={client._id || client.id} value={client.clientName}>
-                        {client.clientName}
-                      </option>
-                    ))}
-                  </select>
+                 <select
+  name="clientName"
+  value={requirementForm.clientName}
+  onChange={handleInputChange}
+  required={isFieldRequired("clientName", true, true)}
+  className={`${themeStyles.input} border p-3 w-full rounded-lg focus:ring-2 focus:ring-blue-500 outline-none`}
+>
+  <option value="">
+    {clients.length === 0 ? "Loading clients..." : "Select Client"}
+  </option>
+
+  {clients.map((client, index) => (
+    <option
+      key={client._id || index}
+      value={client.clientName || client.name}
+    >
+      {client.clientName || client.name}
+    </option>
+  ))}
+</select>
                 </div>
               )}
 
