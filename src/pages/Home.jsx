@@ -526,39 +526,7 @@ const Home = () => {
           )}
         </div>
 
-        {/* OPEN CLIENTS */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700 mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-white">🚀 Open Clients</h2>
-            <div className="text-sm text-blue-400 bg-blue-500/10 px-3 py-1 rounded-full">
-              Total Open: {openClientData.reduce((sum, c) => sum + c.count, 0)} candidates
-            </div>
-          </div>
-
-          {openClientData.length === 0 ? (
-            <div className="text-center py-8 text-gray-400">
-              <div className="text-4xl mb-2">🚀</div>
-              <p>No open clients with active candidates</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {openClientData.map((client, idx) => (
-                <div
-                  key={idx}
-                  className="bg-gradient-to-r from-blue-900/20 to-gray-900/50 border border-blue-500/20 rounded-lg p-4 hover:border-blue-500/40 transition-all group cursor-pointer"
-                  onClick={() => navigate(`/clients?name=${encodeURIComponent(client.clientName)}`)}
-                >
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-300 font-medium group-hover:text-blue-400 transition-colors">
-                      {client.clientName}
-                    </span>
-                    <span className="text-blue-400 font-bold text-lg">{client.count}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        
 
         {/* CLOSED CLIENTS */}
         <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">

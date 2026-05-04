@@ -1,243 +1,168 @@
 import React, { useState, useEffect } from "react";
-import { useLocation } from "react-router-dom";
 import api from "../api";
 
 const RecruiterPayment = () => {
-  const location = useLocation();
-  const [recruiters, setRecruiters] = useState([]);
-  const [selectedRecruiter, setSelectedRecruiter] = useState("");
-  const [payments, setPayments] = useState([]);
+  const [candidates, setCandidates] = useState([]);
+  const [requirements, setRequirements] = useState([]);
+  const [clients, setClients] = useState([]); // ✅ STEP 1: ADD CLIENT STATE
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    recruiterId: "",
-    recruiterName: "",
-    paymentTerm: "Monthly",
-    paymentAmount: "",
-    paymentDate: "",
-    paymentMethod: "Bank Transfer",
-    paymentStatus: "Pending",
-    invoiceNumber: "",
-    remarks: "",
-    candidateName: "",
-    candidateId: "",
-    startDate: "",
-    endDate: "",
-    nextPaymentDate: ""
-  });
 
-  const [totalPaid, setTotalPaid] = useState(0);
-  const [totalPending, setTotalPending] = useState(0);
-
-  // Payment Term Options
-  const paymentTermOptions = [
-    { value: "Monthly", label: "Monthly" },
-    { value: "Quarterly", label: "Quarterly (Every 3 months)" },
-    { value: "Half-Yearly", label: "Half-Yearly (Every 6 months)" },
-    { value: "Yearly", label: "Yearly (Annual)" },
-    { value: "Per Candidate", label: "Per Candidate (Placement basis)" },
-    { value: "One Time", label: "One Time Payment" },
-    { value: "Custom", label: "Custom Term" }
-  ];
-
-  // Payment Method Options
-  const paymentMethodOptions = [
-    { value: "Bank Transfer", label: "Bank Transfer" },
-    { value: "Cash", label: "Cash" },
-    { value: "Cheque", label: "Cheque" },
-    { value: "UPI", label: "UPI" },
-    { value: "Credit Card", label: "Credit Card" },
-    { value: "Debit Card", label: "Debit Card" }
-  ];
-
-  // Payment Status Options
-  const paymentStatusOptions = [
-    { value: "Pending", label: "Pending", color: "text-yellow-400" },
-    { value: "Paid", label: "Paid", color: "text-green-400" },
-    { value: "Partially Paid", label: "Partially Paid", color: "text-blue-400" },
-    { value: "Overdue", label: "Overdue", color: "text-red-400" }
-  ];
+  // ✅ STEP 2: LOAD CLIENT DATA FUNCTION
+  const loadClients = async () => {
+    try {
+      const res = await api.get("/clients");
+      setClients(res.data || []);
+      console.log("Clients loaded:", res.data);
+    } catch (err) {
+      console.error("Error loading clients:", err);
+    }
+  };
 
   useEffect(() => {
-    loadRecruiters();
-    loadPayments();
+    loadCandidates();
+    loadRequirements();
+    loadClients(); // ✅ STEP 3: CALL IT
   }, []);
 
-  useEffect(() => {
-    calculateTotals();
-  }, [payments]);
-
-  // ✅ FIXED: Auto-fill from candidate page redirect - WITH PROPER TIMING
-  useEffect(() => {
-    // ⚠️ CRITICAL: Wait for recruiters AND payments to load first
-    if (location.state && recruiters.length > 0 && payments.length > 0) {
-      const recruiterId = location.state.recruiterId;
-      const recruiter = recruiters.find(r => r._id === recruiterId);
-      const recruiterPayments = payments.filter(p => p.recruiterId === recruiterId);
-      const lastPayment = recruiterPayments.slice(-1)[0];
-      
-      setFormData(prev => ({
-        ...prev,
-        recruiterId: recruiterId || "",
-        recruiterName: recruiter ? recruiter.name : "",
-        candidateName: location.state.candidateName || "",
-        candidateId: location.state.candidateId || "",
-        // 🔥 auto fill from last payment record
-        paymentTerm: lastPayment?.paymentTerm || "Monthly",
-        paymentMethod: lastPayment?.paymentMethod || "Bank Transfer",
-        paymentAmount: lastPayment?.paymentAmount || "",
-        paymentStatus: lastPayment?.paymentStatus || "Pending",
-        // ✅ BONUS: Auto set payment date
-        paymentDate: new Date().toISOString().split("T")[0]
-      }));
-    }
-  }, [location.state, recruiters, payments]);
-
-  const loadRecruiters = async () => {
-    try {
-      const res = await api.get("/users");
-      const recruiterList = res.data.filter(
-        user => user.role === "employee" || user.role === "manager"
-      );
-      setRecruiters(recruiterList);
-    } catch (err) {
-      console.error("Error loading recruiters:", err);
-    }
-  };
-
-  const loadPayments = async () => {
+  const loadCandidates = async () => {
     setLoading(true);
     try {
-      const res = await api.get("/recruiter-payments");
-      setPayments(res.data || []);
+      const res = await api.get("/candidates");
+      setCandidates(res.data || []);
+      // ✅ Debug: Check candidate data structure
+      console.log("ALL candidates:", res.data);
+      res.data?.forEach((c, idx) => {
+        console.log(`Candidate ${idx + 1}:`, {
+          name: `${c.firstName} ${c.lastName}`,
+          clientSections: c.clientSections,
+          status: getLatestStatus(c)
+        });
+      });
     } catch (err) {
-      console.error("Error loading payments:", err);
+      console.error("Error loading candidates:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  const calculateTotals = () => {
-    const paid = payments
-      .filter(p => p.paymentStatus === "Paid")
-      .reduce((sum, p) => sum + (parseFloat(p.paymentAmount) || 0), 0);
-    
-    const pending = payments
-      .filter(p => p.paymentStatus === "Pending" || p.paymentStatus === "Partially Paid")
-      .reduce((sum, p) => sum + (parseFloat(p.paymentAmount) || 0), 0);
-    
-    setTotalPaid(paid);
-    setTotalPending(pending);
-  };
-
-  // ✅ SOLUTION 1: Auto-fill on recruiter select
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    
-    if (name === "recruiterId") {
-      const recruiter = recruiters.find(r => r._id === value);
-      const recruiterPayments = payments.filter(p => p.recruiterId === value);
-      const lastPayment = recruiterPayments.slice(-1)[0];
-      
-      setFormData(prev => ({
-        ...prev,
-        recruiterId: value,
-        recruiterName: recruiter ? recruiter.name : "",
-        // 🔥 auto fill from last payment record
-        paymentTerm: lastPayment?.paymentTerm || "Monthly",
-        paymentMethod: lastPayment?.paymentMethod || "Bank Transfer",
-        paymentAmount: lastPayment?.paymentAmount || "",
-        paymentStatus: lastPayment?.paymentStatus || "Pending",
-        // ✅ BONUS: Auto set payment date
-        paymentDate: prev.paymentDate || new Date().toISOString().split("T")[0]
-      }));
-    } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
-    }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!formData.recruiterId || !formData.paymentAmount) {
-      alert("Please fill required fields: Recruiter and Payment Amount");
-      return;
-    }
-
-    setLoading(true);
+  const loadRequirements = async () => {
     try {
-      const paymentData = {
-        ...formData,
-        paymentAmount: parseFloat(formData.paymentAmount),
-        paymentDate: formData.paymentDate || new Date().toISOString().split("T")[0],
-        createdAt: new Date().toISOString()
-      };
-
-      if (formData._id) {
-        await api.put(`/recruiter-payments/${formData._id}`, paymentData);
-      } else {
-        await api.post("/recruiter-payments", paymentData);
-      }
-      
-      alert("Payment saved successfully!");
-      resetForm();
-      loadPayments();
+      const res = await api.get("/requirements");
+      setRequirements(res.data || []);
+      console.log("Requirements loaded:", res.data);
     } catch (err) {
-      console.error("Error saving payment:", err);
-      alert("Error saving payment: " + err.message);
-    } finally {
-      setLoading(false);
+      console.error("Error loading requirements:", err);
     }
   };
 
-  const resetForm = () => {
-    setFormData({
-      recruiterId: "",
-      recruiterName: "",
-      paymentTerm: "Monthly",
-      paymentAmount: "",
-      paymentDate: new Date().toISOString().split("T")[0],
-      paymentMethod: "Bank Transfer",
-      paymentStatus: "Pending",
-      invoiceNumber: "",
-      remarks: "",
-      candidateName: "",
-      candidateId: "",
-      startDate: "",
-      endDate: "",
-      nextPaymentDate: ""
-    });
-    setSelectedRecruiter("");
-  };
-
-  const handleEdit = (payment) => {
-    setFormData({
-      ...payment,
-      paymentAmount: payment.paymentAmount.toString()
-    });
-  };
-
-  const handleDelete = async (id) => {
-    if (window.confirm("Are you sure you want to delete this payment record?")) {
-      try {
-        await api.delete(`/recruiter-payments/${id}`);
-        alert("Payment deleted successfully!");
-        loadPayments();
-      } catch (err) {
-        console.error("Error deleting payment:", err);
-        alert("Error deleting payment");
-      }
+  // ✅ STEP 1: Get latest status from clientSections
+  const getLatestStatus = (candidate) => {
+    if (!candidate.clientSections || candidate.clientSections.length === 0) {
+      return "";
     }
+    const last = [...candidate.clientSections]
+      .reverse()
+      .find(cs => cs.clientStatus && cs.clientStatus.trim() !== "");
+    return last?.clientStatus || "";
   };
 
+  // ✅ STEP 2: Get designation from clientSections (SAME as AllCandidates)
+  const getDesignation = (candidate) => {
+    if (!candidate.clientSections?.length) return "-";
+    
+    const lastValidDesignation = [...candidate.clientSections]
+      .reverse()
+      .find(cs => cs.designation && cs.designation.trim() !== "");
+    
+    return lastValidDesignation?.designation || "-";
+  };
+
+  // ✅ STEP 4: GET CLIENT NAME FROM CANDIDATE
+  const getClientName = (candidate) => {
+    if (!candidate.clientSections?.length) return "-";
+    const lastValidClient = [...candidate.clientSections]
+      .reverse()
+      .find(cs => cs.clientName && cs.clientName.trim() !== "");
+    return lastValidClient?.clientName || "-";
+  };
+
+  // ✅ STEP 5: GET PAYMENT TERM FROM CLIENT (EXACT MATCH)
+  const getPaymentTermFromClient = (clientName) => {
+    if (!clientName || clientName === "-") return "-";
+    
+    const client = clients.find(c => 
+      c.clientName?.toLowerCase().trim() === clientName?.toLowerCase().trim()
+    );
+    
+    console.log(`Matching client "${clientName}" ->`, client?.paymentTerms || "-");
+    return client?.paymentTerms || "-";
+  };
+
+  // 🟢 OPTIONAL: SAFE MATCH (if you want to use includes instead)
+  // const getPaymentTermFromClient = (clientName) => {
+  //   if (!clientName || clientName === "-") return "-";
+  //   const client = clients.find(c => 
+  //     c.clientName?.toLowerCase().includes(clientName?.toLowerCase().trim())
+  //   );
+  //   return client?.paymentTerms || "-";
+  // };
+
+  // ✅ STEP 3: Filter ONLY Joined candidates (from clientSections status)
+  const joinedCandidates = candidates.filter((c) => {
+    const status = getLatestStatus(c).toLowerCase();
+    return status === "joined";
+  });
+
+  // ✅ Debug: Check filtered results
+  console.log("Joined candidates filtered:", joinedCandidates.length);
+  joinedCandidates.forEach(c => {
+    const clientName = getClientName(c);
+    console.log(`Candidate: ${c.firstName} ${c.lastName}, Client: ${clientName}, Payment Term: ${getPaymentTermFromClient(clientName)}`);
+  });
+
+  // ✅ Get payout from requirements based on designation
+  const getPayoutData = (designation) => {
+    const requirement = requirements.find(r => r.designationPosition === designation);
+    return {
+      payout: requirement?.payoutCommissionRs || 0,
+      percent: requirement?.payoutCommissionPercent || 0
+    };
+  };
+
+  // ✅ STEP 6: CREATE TABLE DATA WITH DYNAMIC PAYMENT TERM
+  const tableData = joinedCandidates.map(candidate => {
+    const designation = getDesignation(candidate);
+    const payoutData = getPayoutData(designation);
+    const clientName = getClientName(candidate);
+    const paymentTerm = getPaymentTermFromClient(clientName);
+    
+    return {
+      id: candidate._id,
+      name: `${candidate.firstName} ${candidate.lastName}`,
+      designation: designation,
+      clientName: clientName, // Optional: add this if you want to show client column
+      payout: payoutData.payout,
+      percent: payoutData.percent,
+      term: paymentTerm // ✅ DYNAMIC NOW
+    };
+  });
+
+  // ✅ Summary statistics
+  const totalPayout = tableData.reduce((sum, row) => sum + row.payout, 0);
+  const avgPercent = tableData.length > 0 
+    ? (tableData.reduce((sum, row) => sum + row.percent, 0) / tableData.length).toFixed(2)
+    : 0;
+
+  // Helper for payment term badge
   const getPaymentTermBadge = (term) => {
+    if (!term || term === "-") return "bg-gray-500/20 text-gray-400";
+    
     const badges = {
       Monthly: "bg-blue-500/20 text-blue-400",
-      Quarterly: "bg-purple-500/20 text-purple-400",
-      "Half-Yearly": "bg-indigo-500/20 text-indigo-400",
       Yearly: "bg-green-500/20 text-green-400",
-      "Per Candidate": "bg-yellow-500/20 text-yellow-400",
-      "One Time": "bg-gray-500/20 text-gray-400",
-      Custom: "bg-orange-500/20 text-orange-400"
+      "One-time": "bg-purple-500/20 text-purple-400",
+      Quarterly: "bg-orange-500/20 text-orange-400",
+      "Half-Yearly": "bg-indigo-500/20 text-indigo-400"
     };
     return badges[term] || "bg-gray-500/20 text-gray-400";
   };
@@ -248,17 +173,33 @@ const RecruiterPayment = () => {
         
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white tracking-tight">Recruiter Payment Management</h1>
-          <p className="text-gray-400 mt-2">Manage recruiter payments, terms, and track payment history</p>
+          <h1 className="text-3xl font-bold text-white tracking-tight">Candidate Payments</h1>
+          <p className="text-gray-400 mt-2">
+            Showing payment details for joined candidates only
+          </p>
         </div>
 
         {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-400 text-sm">Total Paid</p>
-                <p className="text-2xl font-bold text-green-400">₹{totalPaid.toLocaleString()}</p>
+                <p className="text-gray-400 text-sm">Total Candidates</p>
+                <p className="text-2xl font-bold text-white">{candidates.length}</p>
+              </div>
+              <div className="w-12 h-12 bg-gray-500/20 rounded-full flex items-center justify-center">
+                <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-400 text-sm">Joined Candidates</p>
+                <p className="text-2xl font-bold text-green-400">{joinedCandidates.length}</p>
               </div>
               <div className="w-12 h-12 bg-green-500/20 rounded-full flex items-center justify-center">
                 <svg className="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -271,12 +212,12 @@ const RecruiterPayment = () => {
           <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-400 text-sm">Total Pending</p>
-                <p className="text-2xl font-bold text-yellow-400">₹{totalPending.toLocaleString()}</p>
+                <p className="text-gray-400 text-sm">Total Payout</p>
+                <p className="text-2xl font-bold text-yellow-400">₹{totalPayout.toLocaleString()}</p>
               </div>
               <div className="w-12 h-12 bg-yellow-500/20 rounded-full flex items-center justify-center">
                 <svg className="w-6 h-6 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
             </div>
@@ -285,320 +226,111 @@ const RecruiterPayment = () => {
           <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-400 text-sm">Total Payments</p>
-                <p className="text-2xl font-bold text-white">{payments.length}</p>
+                <p className="text-gray-400 text-sm">Avg Payout %</p>
+                <p className="text-2xl font-bold text-purple-400">{avgPercent}%</p>
               </div>
-              <div className="w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center">
-                <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm6-10v4m0 0v4" />
+              <div className="w-12 h-12 bg-purple-500/20 rounded-full flex items-center justify-center">
+                <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                 </svg>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Payment Form */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700 mb-8 overflow-hidden">
-          <div className="bg-gradient-to-r from-blue-600/20 to-transparent px-6 py-4 border-b border-gray-700">
-            <h2 className="text-lg font-semibold text-white">
-              {formData._id ? "Edit Payment" : "Add New Payment"}
-            </h2>
-          </div>
-          
-          <form onSubmit={handleSubmit} className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              
-              {/* Recruiter Selection */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Select Recruiter *
-                </label>
-                <select
-                  name="recruiterId"
-                  value={formData.recruiterId}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                  required
-                >
-                  <option value="">Select Recruiter</option>
-                  {recruiters.map(recruiter => (
-                    <option key={recruiter._id} value={recruiter._id}>
-                      {recruiter.name} - {recruiter.employeeId || recruiter.email}
-                    </option>
-                  ))}
-                </select>
-                {formData.recruiterId && (
-                  <p className="text-xs text-blue-400 mt-1">
-                    ✓ Auto-filled from last payment record
-                  </p>
-                )}
-              </div>
-
-              {/* Payment Term */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Payment Term *
-                </label>
-                <select
-                  name="paymentTerm"
-                  value={formData.paymentTerm}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                >
-                  {paymentTermOptions.map(option => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Payment Amount */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Payment Amount (₹) *
-                </label>
-                <input
-                  type="number"
-                  name="paymentAmount"
-                  value={formData.paymentAmount}
-                  onChange={handleInputChange}
-                  placeholder="Enter amount"
-                  className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                  required
-                />
-              </div>
-
-              {/* Payment Date */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Payment Date
-                </label>
-                <input
-                  type="date"
-                  name="paymentDate"
-                  value={formData.paymentDate}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              {/* Payment Method */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Payment Method
-                </label>
-                <select
-                  name="paymentMethod"
-                  value={formData.paymentMethod}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                >
-                  {paymentMethodOptions.map(option => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Payment Status */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Payment Status
-                </label>
-                <select
-                  name="paymentStatus"
-                  value={formData.paymentStatus}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                >
-                  {paymentStatusOptions.map(option => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Invoice Number */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Invoice Number
-                </label>
-                <input
-                  type="text"
-                  name="invoiceNumber"
-                  value={formData.invoiceNumber}
-                  onChange={handleInputChange}
-                  placeholder="INV-001"
-                  className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              {/* Candidate Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Candidate Name
-                </label>
-                <input
-                  type="text"
-                  name="candidateName"
-                  value={formData.candidateName}
-                  onChange={handleInputChange}
-                  placeholder="Candidate name (if per candidate payment)"
-                  className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              {formData.candidateId && (
-                <input type="hidden" name="candidateId" value={formData.candidateId} />
-              )}
-
-              {/* Start Date */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Start Date
-                </label>
-                <input
-                  type="date"
-                  name="startDate"
-                  value={formData.startDate}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              {/* End Date */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  End Date
-                </label>
-                <input
-                  type="date"
-                  name="endDate"
-                  value={formData.endDate}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              {/* Next Payment Date */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Next Payment Date
-                </label>
-                <input
-                  type="date"
-                  name="nextPaymentDate"
-                  value={formData.nextPaymentDate}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              {/* Remarks */}
-              <div className="md:col-span-2 lg:col-span-3">
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Remarks
-                </label>
-                <textarea
-                  name="remarks"
-                  value={formData.remarks}
-                  onChange={handleInputChange}
-                  rows="3"
-                  placeholder="Additional remarks or notes..."
-                  className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-blue-500"
-                />
-              </div>
-            </div>
-
-            {/* Form Buttons */}
-            <div className="flex gap-3 mt-6 pt-4 border-t border-gray-700">
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all disabled:opacity-50"
-              >
-                {loading ? "Saving..." : formData._id ? "Update Payment" : "Save Payment"}
-              </button>
-              
-              <button
-                type="button"
-                onClick={resetForm}
-                className="px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-all"
-              >
-                Clear Form
-              </button>
-            </div>
-          </form>
-        </div>
-
-        {/* Payment History Table - ✅ FIXED TABLE STRUCTURE */}
+        {/* Main Table */}
         <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700 overflow-hidden">
           <div className="bg-gradient-to-r from-blue-600/20 to-transparent px-6 py-4 border-b border-gray-700">
-            <h2 className="text-lg font-semibold text-white">Payment History</h2>
+            <h2 className="text-lg font-semibold text-white">
+              Joined Candidates Payment Details
+            </h2>
+            <p className="text-sm text-gray-400 mt-1">
+              Showing {tableData.length} of {joinedCandidates.length} joined candidate(s)
+            </p>
           </div>
           
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-900/50">
                 <tr className="border-b border-gray-700">
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Recruiter</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Payment Term</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Amount (₹)</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Method</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Invoice</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">Actions</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">#</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Candidate Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Designation</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Client</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Payout (₹)</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Payout %</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Payment Term</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-700">
-                {payments.length === 0 ? (
+                {loading ? (
                   <tr>
-                    <td colSpan="8" className="px-6 py-12 text-center text-gray-400">
-                      No payment records found
+                    <td colSpan="7" className="px-6 py-12 text-center text-gray-400">
+                      <div className="flex justify-center items-center gap-2">
+                        <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+                        Loading candidates...
+                      </div>
+                    </td>
+                  </tr>
+                ) : tableData.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="px-6 py-12 text-center">
+                      <div className="text-gray-400">
+                        <svg className="w-16 h-16 mx-auto mb-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <p className="text-lg font-medium">No joined candidates found</p>
+                        <p className="text-sm mt-2">Possible reasons:</p>
+                        <ul className="text-xs mt-1 space-y-1">
+                          <li>• No candidates with clientStatus = "Joined" in clientSections</li>
+                          <li>• Check browser console (F12) for candidate data structure</li>
+                          <li>• Make sure clientSections array has clientStatus field</li>
+                        </ul>
+                      </div>
                     </td>
                   </tr>
                 ) : (
-                  payments.map((payment, index) => (
-                    <tr key={payment._id || index} className="hover:bg-gray-700/30 transition-all">
-                      <td className="px-6 py-4 text-white">{payment.recruiterName}</td>
+                  tableData.map((row, index) => (
+                    <tr key={row.id || index} className="hover:bg-gray-700/30 transition-all">
+                      <td className="px-6 py-4 text-gray-400 font-medium">{index + 1}</td>
                       <td className="px-6 py-4">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPaymentTermBadge(payment.paymentTerm)}`}>
-                          {payment.paymentTerm}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-white font-medium">₹{parseFloat(payment.paymentAmount).toLocaleString()}</td>
-                      <td className="px-6 py-4 text-gray-300">{payment.paymentDate ? new Date(payment.paymentDate).toLocaleDateString() : "-"}</td>
-                      <td className="px-6 py-4 text-gray-300">{payment.paymentMethod}</td>
-                      <td className="px-6 py-4">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          payment.paymentStatus === "Paid" ? "bg-green-500/20 text-green-400" :
-                          payment.paymentStatus === "Pending" ? "bg-yellow-500/20 text-yellow-400" :
-                          payment.paymentStatus === "Partially Paid" ? "bg-blue-500/20 text-blue-400" :
-                          "bg-red-500/20 text-red-400"
-                        }`}>
-                          {payment.paymentStatus}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-gray-300">{payment.invoiceNumber || "-"}</td>
-                      <td className="px-6 py-4">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleEdit(payment)}
-                            className="px-3 py-1 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 rounded text-xs transition-all"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDelete(payment._id)}
-                            className="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded text-xs transition-all"
-                          >
-                            Delete
-                          </button>
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white text-sm font-bold">
+                            {row.name.charAt(0)}
+                          </div>
+                          <span className="text-white font-medium">{row.name}</span>
                         </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="px-2 py-1 bg-gray-700/50 rounded-md text-gray-300 text-sm">
+                          {row.designation}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-blue-400 text-sm font-medium">
+                          {row.clientName}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-green-400 font-semibold">
+                          ₹{row.payout.toLocaleString()}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 bg-gray-700 rounded-full h-2">
+                            <div 
+                              className="bg-yellow-400 h-2 rounded-full transition-all" 
+                              style={{ width: `${Math.min(row.percent, 100)}%` }}
+                            ></div>
+                          </div>
+                          <span className="text-yellow-400 text-sm font-medium">{row.percent}%</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPaymentTermBadge(row.term)}`}>
+                          {row.term}
+                        </span>
                       </td>
                     </tr>
                   ))
@@ -606,6 +338,27 @@ const RecruiterPayment = () => {
               </tbody>
             </table>
           </div>
+
+          {/* Footer with summary */}
+          {tableData.length > 0 && (
+            <div className="bg-gray-900/50 px-6 py-4 border-t border-gray-700">
+              <div className="flex justify-between items-center">
+                <div className="text-gray-400 text-sm">
+                  Showing {tableData.length} joined candidates out of {candidates.length} total candidates
+                </div>
+                <div className="flex gap-6">
+                  <div className="text-sm">
+                    <span className="text-gray-400">Total Payout: </span>
+                    <span className="text-green-400 font-semibold">₹{totalPayout.toLocaleString()}</span>
+                  </div>
+                  <div className="text-sm">
+                    <span className="text-gray-400">Average Payout %: </span>
+                    <span className="text-yellow-400 font-semibold">{avgPercent}%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
