@@ -511,24 +511,33 @@ setEditCandidate({
   };
 
   const handleDelete = async (id, name) => {
-    const confirmDelete = window.confirm(`Are you sure you want to delete ${name}?`);
-    if (!confirmDelete) return;
+  const confirmDelete = window.confirm(`Are you sure you want to delete ${name}?`);
+  if (!confirmDelete) return;
 
-    try {
-      await api.delete(`/delete-candidate/${id}`, {
-        data: {
-          deletedByName: currentUser?.firstName && currentUser?.lastName
-            ? `${currentUser.firstName} ${currentUser.lastName}`
-            : currentUser?.name || "System"
-        }
-      });
-      await loadData();
-      alert("Candidate deleted successfully!");
-    } catch (err) {
-      console.error(err);
-      alert("Delete failed. Please try again.");
-    }
-  };
+  // ✅ 1. Remove instantly from UI
+  const deletedCandidate = data.find(c => c._id === id);
+  setData(prev => prev.filter(c => c._id !== id));
+
+  try {
+    // ✅ 2. Backend delete
+    await api.delete(`/delete-candidate/${id}`);
+
+    // ✅ 3. Optional background refresh
+    setTimeout(() => {
+      loadData();
+    }, 500);
+
+    alert("Candidate deleted successfully!");
+
+  } catch (err) {
+    console.error(err);
+
+    // ❌ 4. If failed → restore data
+    setData(prev => [...prev, deletedCandidate]);
+
+    alert("Delete failed. Please try again.");
+  }
+};
 
   const fileToBase64 = (file) => {
     return new Promise((resolve, reject) => {
@@ -761,32 +770,16 @@ setEditCandidate({
     setNewFiles(updatedNewFiles);
   };
 
-  const downloadFile = (file) => {
-    try {
-      const link = document.createElement("a");
-      if (file.data) {
-        if (file.data.startsWith("data:")) {
-          link.href = file.data;
-        } else {
-          const mimeType = file.type || "application/octet-stream";
-          link.href = `data:${mimeType};base64,${file.data}`;
-        }
-      } else if (file.url) {
-        link.href = file.url;
-      } else {
-        alert("Download not available");
-        return;
-      }
-      link.download = file.name;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (error) {
-      console.error("Download error:", error);
-      alert("Failed to download file");
-    }
-  };
+  const downloadFile = (file, candidateId) => {
+  if (!file.id) {
+    alert("File ID missing");
+    return;
+  }
 
+  const url = `/api/candidates/${candidateId}/download-attachment/${file.id}`;
+
+  window.open(url, "_blank");
+};
   const previewFileHandler = (file) => {
     try {
       let fileUrl = null;
@@ -1390,38 +1383,8 @@ const getLatestClientStatus = (candidate) => {
                           </div>
                         </div>
                         <div className="flex gap-1">
-                          <button onClick={async () => {
-                            const full = await getFullCandidate(editCandidate._id);
-                            if (!full) return;
-
-                            // ✅ FIXED: Use index instead of find
-                            const fullFile = full.attachments?.[idx];
-                            if (!fullFile || !fullFile.data) {
-                              alert("File data not found ❌");
-                              return;
-                            }
-
-                            previewFileHandler(fullFile);
-                          }}
-                          className="px-2 py-1 bg-green-500 hover:bg-green-600 text-white text-xs rounded">
-                            Preview
-                          </button>
-                          <button onClick={async () => {
-                            const full = await getFullCandidate(editCandidate._id);
-                            if (!full) return;
-
-                            // ✅ FIXED: Use index instead of find
-                            const fullFile = full.attachments?.[idx];
-                            if (!fullFile || !fullFile.data) {
-                              alert("File data not found ❌");
-                              return;
-                            }
-
-                            downloadFile(fullFile);
-                          }}
-                          className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded">
-                            Download
-                          </button>
+onClick={() => previewFileHandler(file)}
+onClick={() => downloadFile(file, editCandidate._id)}
                           <button onClick={() => removeExistingFile(idx)} className="px-2 py-1 bg-red-500 hover:bg-red-600 text-white text-xs rounded">Remove</button>
                         </div>
                       </div>
@@ -1624,7 +1587,7 @@ const getLatestClientStatus = (candidate) => {
                   Created At {sortField === "createdAt" && (sortOrder === "asc" ? "↑" : "↓")}
                 </th>
                 <th className="px-4 py-3 text-center font-medium">Actions</th>
-              </tr>
+               </tr>
             </thead>
             <tbody>
               {isLoading ? (
@@ -1693,17 +1656,22 @@ const getLatestClientStatus = (candidate) => {
                             </span>
 
                             <div className="flex gap-1">
-                              {c.attachments.map((file, i) => (
+                              {c.attachments.slice(0, 2).map((file, i) => (
                                 <div key={file.id || i} className="flex gap-1">
 
-                                  {/* DOWNLOAD BUTTON - ✅ FIXED: Use index */}
+                                  {/* DOWNLOAD BUTTON */}
                                   <button
                                     onClick={async () => {
                                       const full = await getFullCandidate(c._id);
                                       if (!full) return;
 
-                                      // ✅ FIXED: Use index instead of find
-                                      const fullFile = full.attachments?.[i];
+                                      const fullFile = full.attachments?.find(
+                                        f =>
+                                          f.id === file.id ||
+                                          f.name === file.name ||
+                                          f.uploadedAt === file.uploadedAt
+                                      );
+
                                       if (!fullFile || !fullFile.data) {
                                         alert("Download not available ❌");
                                         return;
@@ -1717,14 +1685,19 @@ const getLatestClientStatus = (candidate) => {
                                     ⬇️
                                   </button>
 
-                                  {/* PREVIEW BUTTON - ✅ FIXED: Use index */}
+                                  {/* PREVIEW BUTTON */}
                                   <button
                                     onClick={async () => {
                                       const full = await getFullCandidate(c._id);
                                       if (!full) return;
 
-                                      // ✅ FIXED: Use index instead of find
-                                      const fullFile = full.attachments?.[i];
+                                      const fullFile = full.attachments?.find(
+                                        f =>
+                                          f.id === file.id ||
+                                          f.name === file.name ||
+                                          f.uploadedAt === file.uploadedAt
+                                      );
+
                                       if (!fullFile || !fullFile.data) {
                                         alert("Preview not available ❌");
                                         return;
@@ -1740,6 +1713,12 @@ const getLatestClientStatus = (candidate) => {
 
                                 </div>
                               ))}
+
+                              {c.attachments.length > 2 && (
+                                <span className="text-xs text-gray-500">
+                                  +{c.attachments.length - 2}
+                                </span>
+                              )}
                             </div>
                           </div>
                         ) : (
@@ -2046,32 +2025,8 @@ const getLatestClientStatus = (candidate) => {
                           <span className="text-sm">{file.name}</span>
                         </div>
                         <div className="flex gap-2">
-                          <button onClick={async () => {
-                            const full = await getFullCandidate(selectedCandidate._id);
-                            if (!full) return;
-
-                            // ✅ FIXED: Use index instead of find
-                            const fullFile = full.attachments?.[idx];
-                            if (!fullFile || !fullFile.data) {
-                              alert("Preview not available ❌");
-                              return;
-                            }
-
-                            previewFileHandler(fullFile);
-                          }} className="px-3 py-1 bg-green-500 text-white rounded text-xs">Preview</button>
-                          <button onClick={async () => {
-                            const full = await getFullCandidate(selectedCandidate._id);
-                            if (!full) return;
-
-                            // ✅ FIXED: Use index instead of find
-                            const fullFile = full.attachments?.[idx];
-                            if (!fullFile || !fullFile.data) {
-                              alert("Download not available ❌");
-                              return;
-                            }
-
-                            downloadFile(fullFile);
-                          }} className="px-3 py-1 bg-blue-500 text-white rounded text-xs">Download</button>
+onClick={() => previewFileHandler(file)}
+onClick={() => downloadFile(file)}
                         </div>
                       </div>
                     ))}
