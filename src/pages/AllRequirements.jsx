@@ -27,10 +27,7 @@ const AllRequirements = () => {
     const savedTheme = localStorage.getItem("theme");
     return savedTheme ? savedTheme === "dark" : true;
   });
-  const [isLoading, setIsLoading] = useState(false); // ✅ Keep but don't block UI
-
-  // Cache configuration
-  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+  const [isLoading, setIsLoading] = useState(false);
 
   // Current user and role checks
   const currentUser = JSON.parse(localStorage.getItem("currentUser"));
@@ -41,33 +38,28 @@ const AllRequirements = () => {
   const canViewSensitive = isAdmin || isManager;
   const canAddRequirement = isAdmin || currentUser?.permissions?.newRequirement === true;
 
-  // ✅ OPTIMIZED: Load dynamic fields with cache
+  // OPTIMIZED: Load dynamic fields with cache
   const loadDynamicFields = async () => {
     try {
-      // Check cache first
       const cached = localStorage.getItem("dynamicFieldsCache");
       if (cached) {
         const parsed = JSON.parse(cached);
-        const isFresh = Date.now() - parsed.timestamp < CACHE_DURATION;
-        if (isFresh && parsed.data?.length > 0) {
+        if (parsed.data?.length > 0) {
           console.log("⚡ Using cached dynamic fields");
           setAllDynamicFields(parsed.data);
           return;
         }
       }
 
-      // Fetch fresh if needed
       const res = await api.get("/form-fields");
       setAllDynamicFields(res.data);
       
-      // Save to cache with timestamp
       localStorage.setItem("dynamicFieldsCache", JSON.stringify({
         data: res.data,
         timestamp: Date.now()
       }));
     } catch (err) {
       console.error("Error loading dynamic fields:", err);
-      // Fallback to cache even if expired
       const cached = localStorage.getItem("dynamicFieldsCache");
       if (cached) {
         const parsed = JSON.parse(cached);
@@ -76,30 +68,24 @@ const AllRequirements = () => {
     }
   };
 
-  // ✅ OPTIMIZED: Load requirements with cache and expiry check
+  // OPTIMIZED: Load requirements with cache
   const loadRequirements = async (forceRefresh = false) => {
     setIsLoading(true);
     try {
-      // ✅ 1. Check cache first (with expiry)
       if (!forceRefresh) {
         const cached = localStorage.getItem("requirementsCache");
         if (cached) {
           const parsed = JSON.parse(cached);
-          const isFresh = Date.now() - parsed.timestamp < CACHE_DURATION;
           
-          if (isFresh && parsed.data?.length > 0) {
-            console.log("⚡ Using fresh cache - API call skipped");
-         setRequirements(parsed.data);
+          if (parsed.data?.length > 0) {
+            console.log("⚡ Loading requirements from cache instantly");
+            setRequirements(parsed.data);
             setIsLoading(false);
-            return; // 🚀 Skip API call completely!
-          } else if (parsed.data?.length > 0) {
-            console.log("⚡ Using expired cache - will update in background");
-           setRequirements(parsed.data);
+            return;
           }
         }
       }
       
-      // ✅ 2. Fetch fresh data in background
       console.log("🔄 Fetching fresh requirements from API");
       const res = await api.get("/requirements");
       const processedRequirements = (res.data || []).map(req => ({
@@ -109,13 +95,13 @@ const AllRequirements = () => {
         fileUploads: (req.fileUploads || []).map(file => ({
   name: file.name,
   type: file.type,
-  url: file.url
+  url: file.url,
+  data: file.data   // ✅ IMPORTANT FIX
 }))
       }));
       
-setRequirements(processedRequirements);
+      setRequirements(processedRequirements);
       
-      // ✅ 3. Save to cache with timestamp
       localStorage.setItem("requirementsCache", JSON.stringify({
         data: processedRequirements,
         timestamp: Date.now()
@@ -125,7 +111,6 @@ setRequirements(processedRequirements);
     } catch (error) {
       console.error("Error loading requirements:", error);
       
-      // If no cache and error, set empty array
       const cached = localStorage.getItem("requirementsCache");
       if (!cached) {
         setRequirements([]);
@@ -136,18 +121,18 @@ setRequirements(processedRequirements);
     }
   };
 
-  // ✅ OPTIMIZED: Single effect for initial load
+  // OPTIMIZED: Single effect for initial load
   useEffect(() => {
-    // Load from cache immediately (if exists)
-    const cached = localStorage.getItem("requirementsCache");
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        if (parsed.data?.length > 0) {
-setRequirements(parsed.data);
-        }
-      } catch(e) {}
-    }
+    // Load from cache instantly
+    // const cached = localStorage.getItem("requirementsCache");
+    // if (cached) {
+    //   try {
+    //     const parsed = JSON.parse(cached);
+    //     if (parsed.data?.length > 0) {
+    //       setRequirements(parsed.data);
+    //     }
+    //   } catch(e) {}
+    // }
     
     // Load dynamic fields from cache
     const cachedFields = localStorage.getItem("dynamicFieldsCache");
@@ -160,39 +145,34 @@ setRequirements(parsed.data);
       } catch(e) {}
     }
     
-    // Fetch fresh data in background (doesn't block UI)
+    // Fetch fresh data in background
     const timer = setTimeout(() => {
-      loadRequirements();
+     loadRequirements(true);
       loadDynamicFields();
     }, 100);
     
     return () => clearTimeout(timer);
   }, []);
-useEffect(() => {
-  const handleNewRequirement = () => {
-    console.log("🔥 Requirement added → refreshing list");
 
-    // clear cache
-    localStorage.removeItem("requirementsCache");
+  useEffect(() => {
+    const handleNewRequirement = () => {
+      console.log("🔥 Requirement added → refreshing list");
+      localStorage.removeItem("requirementsCache");
+      loadRequirements(true);
+      setShowAddPopup(false);
+    };
 
-    // reload data
-    loadRequirements(true);
+    window.addEventListener("requirementAdded", handleNewRequirement);
 
-    // close popup
-    setShowAddPopup(false);
-  };
+    return () => {
+      window.removeEventListener("requirementAdded", handleNewRequirement);
+    };
+  }, []);
 
-  window.addEventListener("requirementAdded", handleNewRequirement);
-
-  return () => {
-    window.removeEventListener("requirementAdded", handleNewRequirement);
-  };
-}, []);
-  // ✅ OPTIMIZED: Filtering effect - only runs when requirements or filters change
+  // Filtering effect
   useEffect(() => {
     let data = [...requirements];
 
-    // 🔍 Search filter
     if (searchTerm.trim() !== "") {
       const searchLower = searchTerm.toLowerCase();
       data = data.filter((req) =>
@@ -207,7 +187,6 @@ useEffect(() => {
       );
     }
 
-    // ✅ Status filter
     if (statusFilter !== "") {
       data = data.filter((req) => req.requirementStatus === statusFilter);
     }
@@ -215,7 +194,6 @@ useEffect(() => {
     setFilteredRequirements(data);
   }, [searchTerm, requirements, statusFilter]);
 
-  // ✅ Manual refresh with force option
   const handleRefresh = () => {
     console.log("🔄 Manual refresh - clearing cache");
     localStorage.removeItem("requirementsCache");
@@ -226,7 +204,7 @@ useEffect(() => {
     if (!requirementToDelete) return;
     try {
       await api.delete(`/delete-requirement/${requirementToDelete._id || requirementToDelete.id}`);
-      localStorage.removeItem("requirementsCache"); // Clear cache on delete
+      localStorage.removeItem("requirementsCache");
       await loadRequirements(true);
       setShowDeleteModal(false);
       setRequirementToDelete(null);
@@ -245,7 +223,7 @@ useEffect(() => {
       const updateData = { ...safeData, requirementStatus: newStatus, updatedAt: new Date().toISOString() };
 
       await api.put(`/update-requirement/${requirementId}`, updateData);
-      localStorage.removeItem("requirementsCache"); // Clear cache on update
+      localStorage.removeItem("requirementsCache");
       await loadRequirements(true);
     } catch (error) {
       console.error("Error updating status:", error);
@@ -303,7 +281,7 @@ useEffect(() => {
       });
 
       await api.put(`/update-requirement/${requirementId}`, updateData);
-      localStorage.removeItem("requirementsCache"); // Clear cache on update
+      localStorage.removeItem("requirementsCache");
       await loadRequirements(true);
       setEditingRequirementId(null);
       setEditFormData(null);
@@ -448,7 +426,6 @@ useEffect(() => {
     setShowDetailsModal(true);
   };
 
-  // Get cache age for display
   const getCacheAge = () => {
     try {
       const cached = localStorage.getItem("requirementsCache");
@@ -668,7 +645,7 @@ useEffect(() => {
                 <tbody>
                   {filteredRequirements.map((req, index) => {
                     const requirementId = req._id || req.id;
-                    const fileUploads = req.fileUploads || [];
+                   const fileUploads = Array.isArray(req.fileUploads) ? req.fileUploads : [];
                     
                     return (
                       <tr key={requirementId} className={`border-b border-gray-800 hover:bg-gray-900/50 transition-colors`}>
@@ -739,7 +716,7 @@ useEffect(() => {
                                 <td className="px-4 py-3 text-gray-300">{req.payoutCommissionRs || "-"}</td>
                                 <td className="px-4 py-3 text-gray-300">{req.payoutCommissionPercent ? `${req.payoutCommissionPercent}%` : "-"}</td>
                                 <td className="px-4 py-3">
-                                  {fileUploads.length > 0 ? (
+                                {Array.isArray(fileUploads) && fileUploads.length > 0 ? (
                                     <button onClick={() => viewAttachments(req)} className="text-blue-400 hover:text-blue-300 text-sm transition-colors">
                                       {fileUploads.length} file(s)
                                     </button>
@@ -781,7 +758,7 @@ useEffect(() => {
         )}
       </div>
 
-      {/* ================== MODALS (same as before - kept unchanged) ================== */}
+      {/* ================== MODALS (unchanged) ================== */}
 
       {/* Add Requirement Modal */}
       {showAddPopup && (
@@ -987,7 +964,6 @@ useEffect(() => {
                   />
                 </div>
 
-                {/* Dynamic Fields */}
                 {allDynamicFields.map(field => (
                   <div key={field.id}>
                     <label className="block text-sm font-medium mb-1 text-gray-300">{field.label}</label>
@@ -1004,7 +980,6 @@ useEffect(() => {
                 ))}
               </div>
 
-              {/* Buttons */}
               <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-800">
                 <button
                   onClick={() => setShowEditPopup(false)}

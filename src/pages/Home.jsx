@@ -7,7 +7,7 @@ import ActivityPopup from "../components/ActivityPopup";
 const Home = () => {
   const navigate = useNavigate();
   
-  // ✅ DEFAULT CHART DATA (7 days placeholder)
+  // DEFAULT CHART DATA (7 days placeholder)
   const defaultChartData = Array.from({ length: 7 }, (_, i) => ({
     date: new Date(Date.now() - (6 - i) * 24 * 60 * 60 * 1000).toLocaleDateString(),
     create: 0,
@@ -16,7 +16,7 @@ const Home = () => {
     updateDetails: []
   }));
 
-  // ✅ States with DEFAULT values (so UI shows immediately)
+  // States with DEFAULT values (so UI shows immediately)
   const [createdData, setCreatedData] = useState(defaultChartData);
   const [updatedData, setUpdatedData] = useState(defaultChartData);
   const [recentActivities, setRecentActivities] = useState([]);
@@ -35,10 +35,7 @@ const Home = () => {
   const [popupOpen, setPopupOpen] = useState(false);
   const [popupData, setPopupData] = useState(null);
 
-  // ✅ Cache expiry time (5 minutes)
- const CACHE_EXPIRY = 30 * 1000;
-
-  // ✅ GROUPING FUNCTION - Groups activities by recruiter/userName
+  // GROUPING FUNCTION - Groups activities by recruiter/userName
   const groupByUser = (activities) => {
     const map = {};
     const limitedActivities = activities.slice(0, 200);
@@ -54,7 +51,7 @@ const Home = () => {
     })).sort((a, b) => b.count - a.count).slice(0, 20);
   };
 
-  // ✅ FIXED: Format chart data with createDetails and updateDetails
+  // Format chart data with createDetails and updateDetails
   const formatChartData = (data, activities) => {
     if (!data || Object.keys(data).length === 0) return defaultChartData;
     
@@ -62,12 +59,10 @@ const Home = () => {
       .map((date) => {
         const d = data[date] || {};
         
-        // Convert date format (DD/MM/YYYY to YYYY-MM-DD)
         const dateParts = date.split("/");
         const dateObj = new Date(`${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`);
         const dateStr = dateObj.toISOString().split("T")[0];
         
-        // Filter activities for this specific date
         const dateActivities = (activities || []).filter(act => {
           let actDate = "";
           if (act.action === "CREATE") {
@@ -78,7 +73,6 @@ const Home = () => {
           return actDate === dateStr && act.module === "candidate";
         });
         
-        // Separate CREATE and UPDATE activities
         const createActivities = dateActivities.filter(act => act.action === "CREATE");
         const updateActivities = dateActivities.filter(act => act.action === "UPDATE");
         
@@ -103,7 +97,7 @@ const Home = () => {
     return formatted.length > 0 ? formatted : defaultChartData;
   };
 
-  // ✅ LOAD FROM CACHE INSTANTLY (NO EXPIRY CHECK FOR DISPLAY)
+  // LOAD FROM CACHE INSTANTLY
   const loadFromCache = () => {
     try {
       const stored = localStorage.getItem("dashboardCache");
@@ -111,7 +105,6 @@ const Home = () => {
         const parsed = JSON.parse(stored);
         
         console.log("⚡ Loading from cache - UI visible instantly");
-        console.log(`   Cache age: ${Math.round((Date.now() - parsed.timestamp) / 1000)} seconds`);
         
         setCreatedData(parsed.createdData || defaultChartData);
         setUpdatedData(parsed.updatedData || defaultChartData);
@@ -127,22 +120,16 @@ const Home = () => {
         return true;
       }
     } catch (err) {
-      console.error("❌ Error loading from cache:", err);
+      console.error("Error loading from cache:", err);
     }
     return false;
   };
 
-  // 🚀 LOAD FRESH DATA
+  // LOAD FRESH DATA (Background update - doesn't block UI)
   const loadDashboardData = async () => {
-    console.log("🔄 Loading fresh data from API (filterDays:", filterDays, ")");
-    
-    // ✅ FIX ISSUE 1: Only show loader if NO cache exists
-    if (!localStorage.getItem("dashboardCache")) {
-      setLoading(true);
-    }
+    console.log("🔄 Loading fresh data from API in background (filterDays:", filterDays, ")");
     
     try {
-      // Parallel API calls
       const [
         candidateRes,
         activitiesRes,
@@ -154,18 +141,16 @@ const Home = () => {
         api.get("/recent-activities?limit=100"),
         api.get("/activity-summary"),
         api.get("/clients"),
-       api.get("/candidates?limit=100")
+        api.get("/candidates?limit=100")
       ]);
 
       const allCandidates = candidatesRes.data || [];
       const candidates = allCandidates.slice(0, 200);
       const activities = activitiesRes.data || [];
 
-      // ✅ Pass activities to formatChartData
       let candidateFormatted = formatChartData(candidateRes.data, activities);
       candidateFormatted = candidateFormatted.slice(0, 90);
       
-      // Split into separate chart data for create and update views
       const createdOnly = candidateFormatted.map(item => ({
         ...item,
         update: 0,
@@ -180,7 +165,6 @@ const Home = () => {
       setUpdatedData(updatedOnly);
       setRecentActivities(activities.slice(0, 15));
 
-      // Set summary stats
       const summaryData = summaryRes.data || {
         total: { create: 0, update: 0, delete: 0 },
         candidate: { create: 0, update: 0, delete: 0 },
@@ -188,7 +172,6 @@ const Home = () => {
       };
       setSummaryStats(summaryData);
 
-      // Process clients
       const clientsList = clientsRes.data || [];
       const clientNameMap = {};
       clientsList.forEach(c => {
@@ -230,7 +213,6 @@ const Home = () => {
       
       setAllClients(chartClients);
       
-      // Open clients
       const openCandidates = candidates.filter(c => 
         c.status && c.status.toLowerCase() !== "rejected"
       );
@@ -263,7 +245,6 @@ const Home = () => {
       
       setOpenClientData(formattedClients);
 
-      // Closed clients (Joined)
       const closedMap = {};
       for (const c of candidates) {
         let lastClient = null;
@@ -295,7 +276,6 @@ const Home = () => {
       
       setClosedClientData(closedClients);
 
-      // Save to cache
       const cacheData = {
         createdData: createdOnly,
         updatedData: updatedOnly,
@@ -309,47 +289,32 @@ const Home = () => {
       };
       
       localStorage.setItem("dashboardCache", JSON.stringify(cacheData));
-      console.log("✅ Data cached to localStorage with recruiter details");
+      console.log("✅ Cache updated with fresh data");
 
     } catch (err) {
-      console.error("❌ Error loading dashboard data:", err);
+      console.error("Error loading dashboard data:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  // ✅ FIXED useEffect - LIKE REQUIREMENTS PAGE (with cleaner cache check)
-useEffect(() => {
-  try {
-    const cached = localStorage.getItem("dashboardCache");
-
-    if (cached) {
-      const parsed = JSON.parse(cached);
-
-      setCreatedData(parsed.createdData || defaultChartData);
-      setUpdatedData(parsed.updatedData || defaultChartData);
-      setRecentActivities(parsed.recentActivities || []);
-      setSummaryStats(parsed.summaryStats || {
-        total: { create: 0, update: 0, delete: 0 },
-        candidate: { create: 0, update: 0, delete: 0 },
-        requirement: { create: 0, update: 0, delete: 0 },
-      });
-      setAllClients(parsed.allClients || []);
-      setOpenClientData(parsed.openClientData || []);
-      setClosedClientData(parsed.closedClientData || []);
-
-      console.log("⚡ Loaded from cache (NO AUTO REFRESH)");
-    } else {
-      // Only first time (no cache)
-      loadDashboardData();
-    }
-
-  } catch (e) {
-    console.log("⚠️ Cache error → loading fresh data");
+  // OPTIMIZED useEffect - Loads cache instantly, then updates in background
+  useEffect(() => {
+    loadFromCache();
     loadDashboardData();
-  }
-}, [filterDays]);
-  // Handle bar click
+    
+    const intervalId = setInterval(() => {
+      console.log("🔄 Auto-refreshing data...");
+      loadDashboardData();
+    }, 30000);
+    
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [filterDays]);
+
   const handleBarClick = (data) => {
     if (!data) return;
     
@@ -362,7 +327,6 @@ useEffect(() => {
     setPopupOpen(true);
   };
 
-  // Handle client bar click
   const handleClientBarClick = (data) => {
     if (!data || !data.date) return;
     navigate(`/clients?name=${encodeURIComponent(data.date)}`);
@@ -373,17 +337,15 @@ useEffect(() => {
     setPopupData(null);
   };
 
-  // Manual refresh - clears cache and forces API call
   const handleRefresh = () => {
-    console.log("🔄 Manual refresh - clearing cache and fetching fresh data");
+    console.log("🔄 Manual refresh - fetching fresh data");
     localStorage.removeItem("dashboardCache");
     loadDashboardData();
   };
 
   const handleClearCache = () => {
-    if (window.confirm("Clear dashboard cache?")) {
+    if (window.confirm("Clear dashboard cache? Data will reload from server.")) {
       localStorage.removeItem("dashboardCache");
-      alert("Cache cleared ✅");
       loadDashboardData();
     }
   };
@@ -431,18 +393,13 @@ useEffect(() => {
           {localStorage.getItem("dashboardCache") && (() => {
             const stored = localStorage.getItem("dashboardCache");
             const parsed = JSON.parse(stored);
-            const isExpired = Date.now() - parsed.timestamp > CACHE_EXPIRY;
             return (
               <div className="mt-2 flex items-center gap-2">
-                <span className={`text-xs px-2 py-1 rounded-full ${
-                  isExpired 
-                    ? "text-yellow-400 bg-yellow-500/10" 
-                    : "text-green-400 bg-green-500/10"
-                }`}>
-                  {isExpired ? "⏳ Cache expired (updating)" : "⚡ Data from cache"}
+                <span className="text-xs px-2 py-1 rounded-full text-green-400 bg-green-500/10">
+                  ⚡ Fast loading from cache
                 </span>
                 <span className="text-xs text-gray-500">
-                  • Cached {getCacheAge()} ago
+                  • Updated {getCacheAge()} ago • Auto-refreshes every 30s
                 </span>
               </div>
             );

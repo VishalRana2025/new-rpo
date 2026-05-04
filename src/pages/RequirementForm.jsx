@@ -536,13 +536,16 @@ const loadClients = async () => {
       }
       formData.append("updatedAt", new Date().toISOString());
       formData.append("dynamicFieldsConfig", JSON.stringify(dynamicFields));
-      
-      requirementAttachments.forEach((file) => {
-        if (file.file) {
-          formData.append("files", file.file);
-        }
-      });
-      
+
+
+
+
+     
+requirementAttachments.forEach((file) => {
+  if (file.file instanceof File) {
+    formData.append("fileUploads", file.file);
+  }
+});
       if (editingRequirement) {
         await api.put(`/update-requirement/${editingRequirement._id || editingRequirement.id}`, formData, {
           headers: { "Content-Type": "multipart/form-data" },
@@ -550,7 +553,11 @@ const loadClients = async () => {
         alert("Requirement updated successfully!");
         navigate("/all-requirements");
       } else {
-await api.post("/add-requirement", formData);
+await api.post("/add-requirement", formData, {
+  headers: {
+    "Content-Type": "multipart/form-data"
+  }
+});
 
 alert("Requirement added successfully!");
 

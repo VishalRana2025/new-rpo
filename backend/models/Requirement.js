@@ -7,10 +7,7 @@ const requirementSchema = new mongoose.Schema({
   process: { type: String, required: true },
   designationPosition: { type: String, required: true },
   requirementType: { type: String, required: true, enum: ['Bonanza', 'Regular', 'FLR'] },
-
-  // ✅ UPDATED FIELD
   clientLocation: { type: String, default: '' },
-
   noOfRequirement: { type: Number, default: 0 },
   driveDate: { type: String, default: null },
   requirementDeadline: { type: String, default: null },
@@ -25,7 +22,12 @@ const requirementSchema = new mongoose.Schema({
   createdByEmployeeId: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
-
 }, { strict: false });
 
-module.exports = mongoose.model("Requirement", requirementSchema);
+// 🔥 ADD THESE INDEXES FOR PERFORMANCE
+requirementSchema.index({ createdAt: -1 });
+requirementSchema.index({ clientName: 1 });
+requirementSchema.index({ requirementType: 1 });
+requirementSchema.index({ createdAt: -1, requirementType: 1 });
+
+module.exports = mongoose.models.Requirement || mongoose.model("Requirement", requirementSchema);

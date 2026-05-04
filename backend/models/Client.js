@@ -5,13 +5,16 @@ const clientSchema = new mongoose.Schema({
   clientPocName: String,
   clientPocEmail: String,
   clientPocMobile: String,
-  clientVendorEmail: String, // ✅ FIXED
+  clientVendorEmail: String,
   ourPocName: String,
   startDate: String,
   paymentTerms: String,
   attachments: Array,
   createdBy: String
 }, { timestamps: true });
-clientSchema.index({ createdAt: -1 });
 
-module.exports = mongoose.model("Client", clientSchema);
+// 🔥 ADD THESE INDEXES
+clientSchema.index({ createdAt: -1 });
+clientSchema.index({ clientName: 1 });
+
+module.exports = mongoose.models.Client || mongoose.model("Client", clientSchema);

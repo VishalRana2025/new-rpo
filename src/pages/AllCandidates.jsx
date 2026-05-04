@@ -511,33 +511,24 @@ setEditCandidate({
   };
 
   const handleDelete = async (id, name) => {
-  const confirmDelete = window.confirm(`Are you sure you want to delete ${name}?`);
-  if (!confirmDelete) return;
+    const confirmDelete = window.confirm(`Are you sure you want to delete ${name}?`);
+    if (!confirmDelete) return;
 
-  // ✅ 1. Remove instantly from UI
-  const deletedCandidate = data.find(c => c._id === id);
-  setData(prev => prev.filter(c => c._id !== id));
-
-  try {
-    // ✅ 2. Backend delete
-    await api.delete(`/delete-candidate/${id}`);
-
-    // ✅ 3. Optional background refresh
-    setTimeout(() => {
-      loadData();
-    }, 500);
-
-    alert("Candidate deleted successfully!");
-
-  } catch (err) {
-    console.error(err);
-
-    // ❌ 4. If failed → restore data
-    setData(prev => [...prev, deletedCandidate]);
-
-    alert("Delete failed. Please try again.");
-  }
-};
+    try {
+      await api.delete(`/delete-candidate/${id}`, {
+        data: {
+          deletedByName: currentUser?.firstName && currentUser?.lastName
+            ? `${currentUser.firstName} ${currentUser.lastName}`
+            : currentUser?.name || "System"
+        }
+      });
+      await loadData();
+      alert("Candidate deleted successfully!");
+    } catch (err) {
+      console.error(err);
+      alert("Delete failed. Please try again.");
+    }
+  };
 
   const fileToBase64 = (file) => {
     return new Promise((resolve, reject) => {
@@ -1403,12 +1394,8 @@ const getLatestClientStatus = (candidate) => {
                             const full = await getFullCandidate(editCandidate._id);
                             if (!full) return;
 
-                            const fullFile = full.attachments?.find(
-                              f =>
-                                f.id === file.id ||
-                                f.name === file.name ||
-                                f.uploadedAt === file.uploadedAt
-                            );
+                            // ✅ FIXED: Use index instead of find
+                            const fullFile = full.attachments?.[idx];
                             if (!fullFile || !fullFile.data) {
                               alert("File data not found ❌");
                               return;
@@ -1423,12 +1410,8 @@ const getLatestClientStatus = (candidate) => {
                             const full = await getFullCandidate(editCandidate._id);
                             if (!full) return;
 
-                            const fullFile = full.attachments?.find(
-                              f =>
-                                f.id === file.id ||
-                                f.name === file.name ||
-                                f.uploadedAt === file.uploadedAt
-                            );
+                            // ✅ FIXED: Use index instead of find
+                            const fullFile = full.attachments?.[idx];
                             if (!fullFile || !fullFile.data) {
                               alert("File data not found ❌");
                               return;
@@ -1641,7 +1624,7 @@ const getLatestClientStatus = (candidate) => {
                   Created At {sortField === "createdAt" && (sortOrder === "asc" ? "↑" : "↓")}
                 </th>
                 <th className="px-4 py-3 text-center font-medium">Actions</th>
-               </tr>
+              </tr>
             </thead>
             <tbody>
               {isLoading ? (
@@ -1710,22 +1693,17 @@ const getLatestClientStatus = (candidate) => {
                             </span>
 
                             <div className="flex gap-1">
-                              {c.attachments.slice(0, 2).map((file, i) => (
+                              {c.attachments.map((file, i) => (
                                 <div key={file.id || i} className="flex gap-1">
 
-                                  {/* DOWNLOAD BUTTON */}
+                                  {/* DOWNLOAD BUTTON - ✅ FIXED: Use index */}
                                   <button
                                     onClick={async () => {
                                       const full = await getFullCandidate(c._id);
                                       if (!full) return;
 
-                                      const fullFile = full.attachments?.find(
-                                        f =>
-                                          f.id === file.id ||
-                                          f.name === file.name ||
-                                          f.uploadedAt === file.uploadedAt
-                                      );
-
+                                      // ✅ FIXED: Use index instead of find
+                                      const fullFile = full.attachments?.[i];
                                       if (!fullFile || !fullFile.data) {
                                         alert("Download not available ❌");
                                         return;
@@ -1739,19 +1717,14 @@ const getLatestClientStatus = (candidate) => {
                                     ⬇️
                                   </button>
 
-                                  {/* PREVIEW BUTTON */}
+                                  {/* PREVIEW BUTTON - ✅ FIXED: Use index */}
                                   <button
                                     onClick={async () => {
                                       const full = await getFullCandidate(c._id);
                                       if (!full) return;
 
-                                      const fullFile = full.attachments?.find(
-                                        f =>
-                                          f.id === file.id ||
-                                          f.name === file.name ||
-                                          f.uploadedAt === file.uploadedAt
-                                      );
-
+                                      // ✅ FIXED: Use index instead of find
+                                      const fullFile = full.attachments?.[i];
                                       if (!fullFile || !fullFile.data) {
                                         alert("Preview not available ❌");
                                         return;
@@ -1767,12 +1740,6 @@ const getLatestClientStatus = (candidate) => {
 
                                 </div>
                               ))}
-
-                              {c.attachments.length > 2 && (
-                                <span className="text-xs text-gray-500">
-                                  +{c.attachments.length - 2}
-                                </span>
-                              )}
                             </div>
                           </div>
                         ) : (
@@ -2080,15 +2047,11 @@ const getLatestClientStatus = (candidate) => {
                         </div>
                         <div className="flex gap-2">
                           <button onClick={async () => {
-                            const full = await getFullCandidate(editCandidate._id);
+                            const full = await getFullCandidate(selectedCandidate._id);
+                            if (!full) return;
 
-                            const fullFile = full.attachments?.find(
-                              f =>
-                                f.id === file.id ||
-                                f.name === file.name ||
-                                f.uploadedAt === file.uploadedAt
-                            );
-
+                            // ✅ FIXED: Use index instead of find
+                            const fullFile = full.attachments?.[idx];
                             if (!fullFile || !fullFile.data) {
                               alert("Preview not available ❌");
                               return;
@@ -2097,15 +2060,11 @@ const getLatestClientStatus = (candidate) => {
                             previewFileHandler(fullFile);
                           }} className="px-3 py-1 bg-green-500 text-white rounded text-xs">Preview</button>
                           <button onClick={async () => {
-                            const full = await getFullCandidate(editCandidate._id);
+                            const full = await getFullCandidate(selectedCandidate._id);
+                            if (!full) return;
 
-                            const fullFile = full.attachments?.find(
-                              f =>
-                                f.id === file.id ||
-                                f.name === file.name ||
-                                f.uploadedAt === file.uploadedAt
-                            );
-
+                            // ✅ FIXED: Use index instead of find
+                            const fullFile = full.attachments?.[idx];
                             if (!fullFile || !fullFile.data) {
                               alert("Download not available ❌");
                               return;

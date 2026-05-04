@@ -1,24 +1,31 @@
 const mongoose = require("mongoose");
 
 const userSchema = new mongoose.Schema({
-  name: String,
-  email: { type: String, unique: true },
-  password: String,
-  role: { type: String, default: "employee" },
-  employeeId: { type: String, unique: true },
+  name: { type: String, required: true },
+  email: { type: String, unique: true, required: true },
+  password: { type: String, required: true },
+  role: { type: String, default: "employee", enum: ["admin", "manager", "employee"] },
+  employeeId: { type: String, unique: true, required: true },
+  department: { type: String, default: "" },
+  phoneNumber: { type: String, default: "" },
+  isApproved: { type: Boolean, default: false },
   isActive: { type: Boolean, default: true },
   permissions: {
-    can_view_new_client: { type: Boolean, default: false },
-    can_view_all_clients: { type: Boolean, default: false },
-    can_create_client: { type: Boolean, default: false },
-    can_edit_client: { type: Boolean, default: false },
-    can_delete_client: { type: Boolean, default: false },
-    can_view_new_requirement: { type: Boolean, default: false },
-    can_view_all_requirements: { type: Boolean, default: false },
-    can_create_requirement: { type: Boolean, default: false },
-    can_edit_requirement: { type: Boolean, default: false },
-    can_delete_requirement: { type: Boolean, default: false },
-  },
+    newClient: { type: Boolean, default: false },
+    allClients: { type: Boolean, default: false },
+    newRequirement: { type: Boolean, default: false },
+    allRequirement: { type: Boolean, default: false },
+    newCandidate: { type: Boolean, default: false },
+    allCandidates: { type: Boolean, default: false }
+  }
 }, { timestamps: true });
 
-module.exports = mongoose.model("User", userSchema);
+// PERFORMANCE INDEXES
+userSchema.index({ role: 1 });
+userSchema.index({ isActive: 1 });
+userSchema.index({ createdAt: -1 });
+userSchema.index({ role: 1, isActive: 1 });
+userSchema.index({ email: 1 });
+userSchema.index({ employeeId: 1 });
+
+module.exports = mongoose.models.User || mongoose.model("User", userSchema);

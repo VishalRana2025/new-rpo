@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import api from "../api";
 
 const RecruiterPayment = () => {
+  const location = useLocation();
   const [recruiters, setRecruiters] = useState([]);
   const [selectedRecruiter, setSelectedRecruiter] = useState("");
   const [payments, setPayments] = useState([]);
@@ -9,11 +11,11 @@ const RecruiterPayment = () => {
   const [formData, setFormData] = useState({
     recruiterId: "",
     recruiterName: "",
-    paymentTerm: "Monthly", // Monthly, Quarterly, Half-Yearly, Yearly, Per Candidate
+    paymentTerm: "Monthly",
     paymentAmount: "",
     paymentDate: "",
-    paymentMethod: "Bank Transfer", // Bank Transfer, Cash, Cheque, UPI
-    paymentStatus: "Pending", // Pending, Paid, Partially Paid, Overdue
+    paymentMethod: "Bank Transfer",
+    paymentStatus: "Pending",
     invoiceNumber: "",
     remarks: "",
     candidateName: "",
@@ -64,10 +66,35 @@ const RecruiterPayment = () => {
     calculateTotals();
   }, [payments]);
 
+  // ✅ FIXED: Auto-fill from candidate page redirect - WITH PROPER TIMING
+  useEffect(() => {
+    // ⚠️ CRITICAL: Wait for recruiters AND payments to load first
+    if (location.state && recruiters.length > 0 && payments.length > 0) {
+      const recruiterId = location.state.recruiterId;
+      const recruiter = recruiters.find(r => r._id === recruiterId);
+      const recruiterPayments = payments.filter(p => p.recruiterId === recruiterId);
+      const lastPayment = recruiterPayments.slice(-1)[0];
+      
+      setFormData(prev => ({
+        ...prev,
+        recruiterId: recruiterId || "",
+        recruiterName: recruiter ? recruiter.name : "",
+        candidateName: location.state.candidateName || "",
+        candidateId: location.state.candidateId || "",
+        // 🔥 auto fill from last payment record
+        paymentTerm: lastPayment?.paymentTerm || "Monthly",
+        paymentMethod: lastPayment?.paymentMethod || "Bank Transfer",
+        paymentAmount: lastPayment?.paymentAmount || "",
+        paymentStatus: lastPayment?.paymentStatus || "Pending",
+        // ✅ BONUS: Auto set payment date
+        paymentDate: new Date().toISOString().split("T")[0]
+      }));
+    }
+  }, [location.state, recruiters, payments]);
+
   const loadRecruiters = async () => {
     try {
       const res = await api.get("/users");
-      // Filter only recruiters (employees with recruiter permissions)
       const recruiterList = res.data.filter(
         user => user.role === "employee" || user.role === "manager"
       );
@@ -102,18 +129,29 @@ const RecruiterPayment = () => {
     setTotalPending(pending);
   };
 
+  // ✅ SOLUTION 1: Auto-fill on recruiter select
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
     
-    // Auto-update recruiter name when recruiterId changes
     if (name === "recruiterId") {
       const recruiter = recruiters.find(r => r._id === value);
-      setFormData(prev => ({ 
-        ...prev, 
+      const recruiterPayments = payments.filter(p => p.recruiterId === value);
+      const lastPayment = recruiterPayments.slice(-1)[0];
+      
+      setFormData(prev => ({
+        ...prev,
         recruiterId: value,
-        recruiterName: recruiter ? recruiter.name : "" 
+        recruiterName: recruiter ? recruiter.name : "",
+        // 🔥 auto fill from last payment record
+        paymentTerm: lastPayment?.paymentTerm || "Monthly",
+        paymentMethod: lastPayment?.paymentMethod || "Bank Transfer",
+        paymentAmount: lastPayment?.paymentAmount || "",
+        paymentStatus: lastPayment?.paymentStatus || "Pending",
+        // ✅ BONUS: Auto set payment date
+        paymentDate: prev.paymentDate || new Date().toISOString().split("T")[0]
       }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
     }
   };
 
@@ -130,14 +168,13 @@ const RecruiterPayment = () => {
       const paymentData = {
         ...formData,
         paymentAmount: parseFloat(formData.paymentAmount),
+        paymentDate: formData.paymentDate || new Date().toISOString().split("T")[0],
         createdAt: new Date().toISOString()
       };
 
       if (formData._id) {
-        // Update existing payment
         await api.put(`/recruiter-payments/${formData._id}`, paymentData);
       } else {
-        // Create new payment
         await api.post("/recruiter-payments", paymentData);
       }
       
@@ -290,6 +327,11 @@ const RecruiterPayment = () => {
                     </option>
                   ))}
                 </select>
+                {formData.recruiterId && (
+                  <p className="text-xs text-blue-400 mt-1">
+                    ✓ Auto-filled from last payment record
+                  </p>
+                )}
               </div>
 
               {/* Payment Term */}
@@ -394,7 +436,7 @@ const RecruiterPayment = () => {
                 />
               </div>
 
-              {/* Candidate Name (for Per Candidate payment) */}
+              {/* Candidate Name */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
                   Candidate Name
@@ -409,7 +451,11 @@ const RecruiterPayment = () => {
                 />
               </div>
 
-              {/* Start Date (for contract period) */}
+              {formData.candidateId && (
+                <input type="hidden" name="candidateId" value={formData.candidateId} />
+              )}
+
+              {/* Start Date */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
                   Start Date
@@ -423,7 +469,7 @@ const RecruiterPayment = () => {
                 />
               </div>
 
-              {/* End Date (for contract period) */}
+              {/* End Date */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
                   End Date
@@ -488,7 +534,7 @@ const RecruiterPayment = () => {
           </form>
         </div>
 
-        {/* Payment History Table */}
+        {/* Payment History Table - ✅ FIXED TABLE STRUCTURE */}
         <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700 overflow-hidden">
           <div className="bg-gradient-to-r from-blue-600/20 to-transparent px-6 py-4 border-b border-gray-700">
             <h2 className="text-lg font-semibold text-white">Payment History</h2>

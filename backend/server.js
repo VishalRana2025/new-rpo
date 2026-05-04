@@ -31,7 +31,7 @@ app.use(cors({
 // ✅ VERY IMPORTANT (preflight fix)
 app.options("*", cors());
 app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use("/api/resume", resumeRoutes);
 
 // ================== FILE UPLOAD ==================
@@ -539,13 +539,14 @@ app.delete("/api/delete-client/:id", async (req, res) => {
 // ================== REQUIREMENT APIs (FIXED - NO LIMIT) ==================
 
 // ✅ CREATE REQUIREMENT with Activity Log
-app.post("/api/add-requirement", upload.array("files"), async (req, res) => {
+app.post("/api/add-requirement", upload.array("fileUploads"), async (req, res) => {
   try {
+
+    console.log("FILES RECEIVED:", req.files); // ✅ ALWAYS log
+
     if (req.body.recruiterLocation && !req.body.clientLocation) {
       req.body.clientLocation = req.body.recruiterLocation;
-      console.log("✅ Converted recruiterLocation to clientLocation");
     }
-
     const files = req.files?.map(f => ({
       name: f.originalname,
       data: f.buffer.toString("base64"),
@@ -759,9 +760,9 @@ app.delete("/api/login-history", async (req, res) => {
 app.get("/api/candidates", async (req, res) => {
   try {
     const data = await Candidate.find()
-      .select("-resume -attachments.data")
+      .select("-resume") // ✅ FIX
       .sort({ createdAt: -1 })
-      .lean(); // No .limit() here!
+      .lean();
     
     console.log(`✅ Fetched ${data.length} candidates (no limit)`);
     res.json(data);
@@ -807,17 +808,28 @@ app.post("/api/add-candidate", async (req, res) => {
       attachments = [];
     }
     
-    const validAttachments = attachments
-      .filter(att => att && typeof att === 'object')
-      .map(att => ({
-        id: att.id || `${Date.now()}-${Math.random()}`,
-        name: att.name || "unnamed",
-        type: att.type || "application/octet-stream",
-        size: att.size || 0,
-        uploadedAt: att.uploadedAt || new Date().toISOString(),
-        data: att.data || null
-      }));
-    
+   const validAttachments = attachments
+  .filter(att => att && typeof att === 'object')
+  .map(att => {
+    console.log("📎 Attachment received:", {
+      name: att.name,
+      hasData: !!att.data,
+      dataLength: att.data ? att.data.length : 0
+    });
+
+    return {
+      id: att.id || `${Date.now()}-${Math.random()}`,
+      name: att.name || "unnamed",
+      type: att.type || "application/octet-stream",
+      size: att.size || 0,
+      uploadedAt: att.uploadedAt || new Date().toISOString(),
+
+      // ✅ STRICT SAVE (NO auto-null)
+      data: typeof att.data === "string" && att.data.startsWith("data:")
+        ? att.data
+        : null
+    };
+  });
     console.log(`✅ Processing ${validAttachments.length} valid attachments`);
     
     const newCandidate = new Candidate({
@@ -1201,22 +1213,4 @@ const PORT = process.env.PORT || 5001;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

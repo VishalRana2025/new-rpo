@@ -418,7 +418,7 @@ phone: localData.phone || apiData.phone || prev.phone,
         };
         
         // Replace existing attachment (only one file at a time)
-        setCandidateAttachments([fileData]);
+       setCandidateAttachments((prev) => [...prev, fileData]);
         setCandidateUploadProgress((prev) => ({ ...prev, [fileId]: 100 }));
         
       } catch (error) {
@@ -430,10 +430,17 @@ phone: localData.phone || apiData.phone || prev.phone,
     e.target.value = "";
   };
 
-  const removeAttachment = (fileId) => {
-    setCandidateAttachments([]);
-    setCandidateUploadProgress({});
-  };
+ const removeAttachment = (fileId) => {
+  setCandidateAttachments((prev) =>
+    prev.filter((file) => file.id !== fileId)
+  );
+
+  setCandidateUploadProgress((prev) => {
+    const updated = { ...prev };
+    delete updated[fileId];
+    return updated;
+  });
+};
 
   const downloadFile = (file) => {
     if (file.data) {

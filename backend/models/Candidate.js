@@ -19,10 +19,7 @@ const clientSectionSchema = new mongoose.Schema({
   processLOB: { type: String, default: "" },
   salary: { type: String, default: "" },
   hrRemark: { type: String, default: "" },
-
-  // ✅ IMPORTANT
   clientStatus: { type: String, default: "" },
-
   status: { type: String, default: "" },
   remark: { type: String, default: "" }
 });
@@ -55,6 +52,7 @@ const candidateSchema = new mongoose.Schema({
 
   // Recruiter Status
   status: { type: String, default: "" },
+  candidateStatus: { type: String, default: "" }, // ✅ ADD THIS FIELD
   remark: { type: String, default: "" },
 
   tags: {
@@ -91,12 +89,23 @@ const candidateSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now }
 });
 
-// 🔥🔥🔥 MOST IMPORTANT (PERFORMANCE BOOST)
+// 🔥🔥🔥 PERFORMANCE INDEXES (CRITICAL FOR SPEED)
+
+// Primary index for sorting by creation date
 candidateSchema.index({ createdAt: -1 });
 
-// 🔥 OPTIONAL (ADVANCED BOOST)
-candidateSchema.index({ createdAt: -1, status: 1 });
+// Index for status filtering (used in open/closed clients)
+candidateSchema.index({ status: 1 });
+candidateSchema.index({ candidateStatus: 1 });
 
-module.exports =
-  mongoose.models.Candidate ||
-  mongoose.model("Candidate", candidateSchema);
+// Compound indexes for common queries
+candidateSchema.index({ createdAt: -1, status: 1 });
+candidateSchema.index({ "clientSections.clientName": 1 });
+candidateSchema.index({ "clientSections.clientStatus": 1 });
+
+// Search indexes
+candidateSchema.index({ firstName: 1, lastName: 1 });
+candidateSchema.index({ email: 1 });
+candidateSchema.index({ phone: 1 });
+
+module.exports = mongoose.models.Candidate || mongoose.model("Candidate", candidateSchema);

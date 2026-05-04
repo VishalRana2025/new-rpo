@@ -23,15 +23,11 @@ const activityLogSchema = new mongoose.Schema({
     type: String,
     default: "System"
   },
+  status: { type: String, default: "" },  // ✅ Add for candidate status tracking
+  clientName: { type: String, default: "" }, // ✅ Add for better tracking
   createdAt: {
     type: Date,
     default: Date.now
-  },
-  updatedAt: {
-    type: Date
-  },
-  deletedAt: {
-    type: Date
   }
 });
 
@@ -39,7 +35,6 @@ const activityLogSchema = new mongoose.Schema({
 activityLogSchema.index({ createdAt: -1 });
 activityLogSchema.index({ module: 1, action: 1 });
 activityLogSchema.index({ userName: 1 });
+activityLogSchema.index({ module: 1, createdAt: -1 }); // ✅ Compound index for filtering
 
-module.exports =
-  mongoose.models.ActivityLog ||
-  mongoose.model("ActivityLog", activityLogSchema);
+module.exports = mongoose.models.ActivityLog || mongoose.model("ActivityLog", activityLogSchema);
