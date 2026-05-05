@@ -20,6 +20,7 @@ const clientSectionSchema = new mongoose.Schema({
   salary: { type: String, default: "" },
   hrRemark: { type: String, default: "" },
   clientStatus: { type: String, default: "" },
+   joinedDate: { type: String, default: "" },  
   status: { type: String, default: "" },
   remark: { type: String, default: "" }
 });

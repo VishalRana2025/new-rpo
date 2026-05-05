@@ -907,16 +907,17 @@ app.put("/api/update-candidate/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-    const cleanClientSections = (req.body.clientSections || []).map(cs => ({
-      clientName: cs?.clientName || "",
-      designation: cs?.designation || "",
-      clientLocation: cs?.clientLocation || "",
-      process: cs?.process || "",
-      processLOB: cs?.processLOB || "",
-      salary: cs?.salary || "",
-      hrRemark: cs?.hrRemark || "",
-      clientStatus: cs?.clientStatus || ""
-    }));
+   const cleanClientSections = (req.body.clientSections || []).map(cs => ({
+  clientName: cs?.clientName || "",
+  designation: cs?.designation || "",
+  clientLocation: cs?.clientLocation || "",
+  process: cs?.process || "",
+  processLOB: cs?.processLOB || "",
+  salary: cs?.salary || "",
+  hrRemark: cs?.hrRemark || "",
+  clientStatus: cs?.clientStatus || "",
+  joinedDate: cs?.joinedDate || ""   // ✅ FIX
+}));
 
     const updateData = {
       firstName: req.body.firstName || "",

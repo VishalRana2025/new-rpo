@@ -65,7 +65,35 @@ const RecruiterPayment = () => {
       .find(cs => cs.clientStatus && cs.clientStatus.trim() !== "");
     return last?.clientStatus || "";
   };
+const getJoinedDate = (candidate) => {
+  if (!candidate.clientSections || candidate.clientSections.length === 0) {
+    return "-";
+  }
 
+  const lastJoined = [...candidate.clientSections]
+    .reverse()
+    .find(cs => cs.clientStatus === "Joined");
+
+  return lastJoined?.joinedDate || "-";
+};
+const getPaymentDate = (joinedDate, term) => {
+  if (!joinedDate || joinedDate === "-") return "-";
+
+  const date = new Date(joinedDate);
+
+  let days = 0;
+
+  // 🔥 convert term to days
+  if (term === "Monthly") days = 30;
+  else if (term === "Quarterly") days = 90;
+  else if (term === "Half-Yearly") days = 180;
+  else if (term === "Yearly") days = 365;
+  else if (!isNaN(term)) days = Number(term); // if numeric like "30"
+
+  date.setDate(date.getDate() + days);
+
+  return date.toISOString().split("T")[0];
+};
   // ✅ STEP 2: Get designation from clientSections (SAME as AllCandidates)
   const getDesignation = (candidate) => {
     if (!candidate.clientSections?.length) return "-";
@@ -136,15 +164,19 @@ const RecruiterPayment = () => {
     const clientName = getClientName(candidate);
     const paymentTerm = getPaymentTermFromClient(clientName);
     
-    return {
-      id: candidate._id,
-      name: `${candidate.firstName} ${candidate.lastName}`,
-      designation: designation,
-      clientName: clientName, // Optional: add this if you want to show client column
-      payout: payoutData.payout,
-      percent: payoutData.percent,
-      term: paymentTerm // ✅ DYNAMIC NOW
-    };
+   const joinedDate = getJoinedDate(candidate);
+
+return {
+  id: candidate._id,
+  name: `${candidate.firstName} ${candidate.lastName}`,
+  designation: designation,
+  clientName: clientName,
+  payout: payoutData.payout,
+  percent: payoutData.percent,
+  term: paymentTerm,
+  joinedDate: joinedDate,
+  paymentDate: getPaymentDate(joinedDate, paymentTerm)   // ✅ ADD THIS
+};
   });
 
   // ✅ Summary statistics
@@ -260,6 +292,12 @@ const RecruiterPayment = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Payout (₹)</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Payout %</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Payment Term</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">
+  Joined Date
+</th>
+<th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">
+  Payment Date
+</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-700">
@@ -311,6 +349,7 @@ const RecruiterPayment = () => {
                           {row.clientName}
                         </span>
                       </td>
+                      
                       <td className="px-6 py-4">
                         <span className="text-green-400 font-semibold">
                           ₹{row.payout.toLocaleString()}
@@ -332,6 +371,16 @@ const RecruiterPayment = () => {
                           {row.term}
                         </span>
                       </td>
+                      <td className="px-6 py-4 text-sm text-gray-300">
+  {row.joinedDate !== "-" 
+    ? new Date(row.joinedDate).toLocaleDateString("en-IN") 
+    : "-"}
+</td>
+<td className="px-6 py-4 text-sm text-green-400">
+  {row.paymentDate !== "-" 
+    ? new Date(row.paymentDate).toLocaleDateString("en-IN") 
+    : "-"}
+</td>
                     </tr>
                   ))
                 )}
@@ -361,6 +410,9 @@ const RecruiterPayment = () => {
           )}
         </div>
       </div>
+
+
+
     </div>
   );
 };

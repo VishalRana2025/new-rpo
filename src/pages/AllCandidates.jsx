@@ -402,17 +402,17 @@
       }
       
       const newSection = {
-        tempId: Date.now(),
-        clientName: "",
-        designation: "",
-        clientLocation: "",
-        process: "",
-        processLOB: "",
-        salary: "",
-        hrRemark: "",
-        clientStatus: ""
-      };
-      
+  tempId: Date.now(),
+  clientName: "",
+  designation: "",
+  clientLocation: "",
+  process: "",
+  processLOB: "",
+  salary: "",
+  hrRemark: "",
+  clientStatus: "",
+  joinedDate: ""   // ✅ ADD THIS
+};
       setClientSections(prev => {
         const updated = [...prev, newSection];
         setActiveClientIndex(updated.length - 1);
@@ -479,7 +479,8 @@
               processLOB: section.processLOB || "",
               salary: section.salary || "",
               hrRemark: section.hrRemark || "",
-              clientStatus: section.clientStatus || "",
+             clientStatus: section.clientStatus || "",
+joinedDate: section.joinedDate || "",
               _id: section._id
             }))
           : [
@@ -493,6 +494,7 @@
                 salary: "",
                 hrRemark: "",
                 clientStatus: ""
+                
               }
             ]
       );
@@ -666,15 +668,16 @@
           attachments: allAttachments, // ✅ Save with preserved attachments
           interviewRounds: safeInterviewRounds, // ✅ FIXED: Use normalized interview rounds
           clientSections: (Array.isArray(clientSections) ? clientSections : []).map(sec => ({
-            clientName: sec?.clientName || "",
-            designation: sec?.designation || "",
-            clientLocation: sec?.clientLocation || "",
-            process: sec?.process || "",
-            processLOB: sec?.processLOB || "",
-            salary: sec?.salary || "",
-            hrRemark: sec?.hrRemark || "",
-            clientStatus: sec?.clientStatus || ""
-          })),
+  clientName: sec?.clientName || "",
+  designation: sec?.designation || "",
+  clientLocation: sec?.clientLocation || "",
+  process: sec?.process || "",
+  processLOB: sec?.processLOB || "",
+  salary: sec?.salary || "",
+  hrRemark: sec?.hrRemark || "",
+  clientStatus: sec?.clientStatus || "",
+  joinedDate: sec?.joinedDate || ""   // ✅ ADD
+})),
           updatedAt: new Date().toISOString()
         };
         
@@ -1182,30 +1185,64 @@ await loadData();
                 <h4 className="text-sm font-semibold mb-4 flex items-center gap-2">
                   🏢 Client & Interview {activeClientIndex + 1}
                 </h4>
-                <div className={`${themeStyles.card} p-4 rounded-lg border mb-4`}>
-                  <label className={`block text-sm font-medium mb-2 ${themeStyles.secondaryText}`}>
-                    Client Status
-                  </label>
-                  <select
-                    value={currentSection.clientStatus || ""}
-                    onChange={(e) =>
-                      updateClientSectionField(
-                        currentSection._id || currentSection.tempId,
-                        "clientStatus",
-                        e.target.value
-                      )
-                    }
-                    className={`${themeStyles.input} border rounded-lg p-2 w-full`}
-                  >
-                    <option value="">Select Status</option>
-                    <option value="Offer Released">Offer Released</option>
-                    <option value="Offer Pending">Offer Pending</option>
-                    <option value="Joined">Joined</option>
-                    <option value="No Show">No Show</option>
-                    <option value="Rejected- Client">Rejected- Client</option>
-                   <option value="Duplicate">Duplicate</option>
-                  </select>
-                </div>
+               <div className={`${themeStyles.card} p-4 rounded-lg border mb-4`}>
+  <label className={`block text-sm font-medium mb-2 ${themeStyles.secondaryText}`}>
+    Client Status
+  </label>
+
+  <select
+    value={currentSection.clientStatus || ""}
+    onChange={(e) => {
+      const value = e.target.value;
+
+      updateClientSectionField(
+        currentSection._id || currentSection.tempId,
+        "clientStatus",
+        value
+      );
+
+      // reset date if not Joined
+      if (value !== "Joined") {
+        updateClientSectionField(
+          currentSection._id || currentSection.tempId,
+          "joinedDate",
+          ""
+        );
+      }
+    }}
+    className={`${themeStyles.input} border rounded-lg p-2 w-full`}
+  >
+    <option value="">Select Status</option>
+    <option value="Offer Released">Offer Released</option>
+    <option value="Offer Pending">Offer Pending</option>
+    <option value="Joined">Joined</option>
+    <option value="No Show">No Show</option>
+    <option value="Rejected- Client">Rejected- Client</option>
+    <option value="Duplicate">Duplicate</option>
+  </select>
+
+  {/* ✅ FIXED: INSIDE SAME DIV */}
+  {currentSection.clientStatus === "Joined" && (
+    <div className="mt-3">
+      <label className={`block text-sm font-medium mb-1 ${themeStyles.secondaryText}`}>
+        Joined Date
+      </label>
+
+      <input
+        type="date"
+        value={currentSection.joinedDate || ""}
+        onChange={(e) =>
+          updateClientSectionField(
+            currentSection._id || currentSection.tempId,
+            "joinedDate",
+            e.target.value
+          )
+        }
+        className={`${themeStyles.input} border rounded-lg p-2 w-full`}
+      />
+    </div>
+  )}
+</div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className={`block text-sm font-medium mb-1 ${themeStyles.secondaryText}`}>Client Name</label>
