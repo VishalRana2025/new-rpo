@@ -218,10 +218,10 @@
       switch (field) {
         case "name":
           return `${candidate.firstName} ${candidate.lastName}`.trim();
-        case "email":
-          return candidate.email || "";
-        case "phone":
-          return candidate.phone || "";
+        // case "email":
+        //   return candidate.email || "";
+        // case "phone":
+        //   return candidate.phone || "";
         case "secondaryPhone":
           return candidate.secondaryPhone || "";
         case "recruiter":
@@ -289,8 +289,8 @@
           const searchString = searchTerm.toLowerCase();
           return (
             `${candidate.firstName} ${candidate.lastName}`.toLowerCase().includes(searchString) ||
-            candidate.email?.toLowerCase().includes(searchString) ||
-            candidate.phone?.toLowerCase().includes(searchString) ||
+            // candidate.email?.toLowerCase().includes(searchString) ||
+            // candidate.phone?.toLowerCase().includes(searchString) ||
             candidate.recruiter?.toLowerCase().includes(searchString) ||
             candidate.sourcedFrom?.toLowerCase().includes(searchString) ||
             candidate.source?.toLowerCase().includes(searchString) ||
@@ -1523,7 +1523,7 @@ await loadData();
                   <div className="absolute right-0 mt-2 w-56 bg-black text-white rounded-lg shadow-xl border border-gray-700 z-[9999] overflow-hidden">
                     <div className="p-2 border-b border-gray-700">
                       <p className="text-xs font-semibold text-gray-400 px-2 mb-1">Sort By</p>
-                      <button onClick={() => { setSortField("status"); setShowSort(false); }} className={`w-full text-left px-3 py-2 text-sm rounded-md transition-all ${sortField === "status" ? "bg-white text-black font-medium" : "hover:bg-gray-800"}`}>🏷️ Status</button>
+                      <button onClick={() => { setSortField("status"); setShowSort(false); }} className={`w-full text-left px-3 py-2 text-sm rounded-md transition-all ${sortField === "status" ? "bg-white text-black font-medium" : "hover:bg-gray-800"}`}>🏷️ Client Status</button>
                       <button onClick={() => { setSortField("name"); setShowSort(false); }} className={`w-full text-left px-3 py-2 text-sm rounded-md transition-all ${sortField === "name" ? "bg-white text-black font-medium" : "hover:bg-gray-800"}`}>📝 Name</button>
                       <button onClick={() => { setSortField("createdAt"); setShowSort(false); }} className={`w-full text-left px-3 py-2 text-sm rounded-md transition-all ${sortField === "createdAt" ? "bg-white text-black font-medium" : "hover:bg-gray-800"}`}>📅 Created Date</button>
                       <button onClick={() => { setSortField("sourceDate"); setShowSort(false); }} className={`w-full text-left px-3 py-2 text-sm rounded-md transition-all ${sortField === "sourceDate" ? "bg-white text-black font-medium" : "hover:bg-gray-800"}`}>📆 Source Date</button>
@@ -1580,13 +1580,16 @@ await loadData();
                 <tr className="border-b">
                   <th className="px-4 py-3 text-left font-medium">#</th>
                   <th className="px-4 py-3 text-left font-medium cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-all" onClick={() => { if (sortField === "status") { setSortOrder(sortOrder === "asc" ? "desc" : "asc"); } else { setSortField("status"); setSortOrder("asc"); } }}>
-                    Status {sortField === "status" && (sortOrder === "asc" ? "↑" : "↓")}
+                    Client Status {sortField === "status" && (sortOrder === "asc" ? "↑" : "↓")}
                   </th>
+                  <th className="px-4 py-3 text-left font-medium">
+  Recruiter Status
+</th>
                   <th className="px-4 py-3 text-left font-medium cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-all" onClick={() => { if (sortField === "name") { setSortOrder(sortOrder === "asc" ? "desc" : "asc"); } else { setSortField("name"); setSortOrder("asc"); } }}>
                     Name {sortField === "name" && (sortOrder === "asc" ? "↑" : "↓")}
                   </th>
-                  <th className="px-4 py-3 text-left font-medium">Email</th>
-                  <th className="px-4 py-3 text-left font-medium">Phone</th>
+                  {/* <th className="px-4 py-3 text-left font-medium">Email</th>
+                  <th className="px-4 py-3 text-left font-medium">Phone</th> */}
                   <th className="px-4 py-3 text-left font-medium">Secondary</th>
                   <th className="px-4 py-3 text-left font-medium">Recruiter</th>
                   <th className="px-4 py-3 text-left font-medium">Source</th>
@@ -1644,9 +1647,19 @@ await loadData();
                             <span className="text-gray-400 text-xs">—</span>
                           )}
                         </td>
+                        {/* Recruiter Status */}
+<td className="px-4 py-3">
+  {c.status ? (
+    <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${getStatusBadgeStyle(c.status)}`}>
+      {c.status}
+    </span>
+  ) : (
+    <span className="text-gray-400 text-xs">—</span>
+  )}
+</td>
                         <td className="px-4 py-3 font-medium">{c.firstName} {c.lastName}</td>
-                        <td className="px-4 py-3"><a href={`mailto:${c.email}`} className="text-blue-600 hover:underline">{c.email}</a></td>
-                        <td className="px-4 py-3"><a href={`tel:${c.phone}`} className="hover:underline">{c.phone}</a></td>
+                        {/* <td className="px-4 py-3"><a href={`mailto:${c.email}`} className="text-blue-600 hover:underline">{c.email}</a></td>
+                        <td className="px-4 py-3"><a href={`tel:${c.phone}`} className="hover:underline">{c.phone}</a></td> */}
                         <td className="px-4 py-3">{c.secondaryPhone || "—"}</td>
                         <td className="px-4 py-3">{c.recruiter || "—"}</td>
                         <td className="px-4 py-3">{c.sourcedFrom ? <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full text-xs">{c.sourcedFrom}</span> : "—"}</td>
