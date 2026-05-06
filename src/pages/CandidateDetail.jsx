@@ -602,15 +602,16 @@ phone: localData.phone || apiData.phone || prev.phone,
     setIsLoading(true);
 
     try {
-      const attachmentsData = candidateAttachments.map(file => ({
-        id: file.id,
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        uploadedAt: file.uploadedAt,
-        data: file.data
-      }));
-
+     const attachmentsData = candidateAttachments
+  .filter(file => file && file.data)   // ✅ remove null files
+  .map(file => ({
+    id: file.id,
+    name: file.name,
+    type: file.type,
+    size: file.size,
+    uploadedAt: file.uploadedAt,
+    data: file.data
+  }));
       const payload = {
         recruiter: candidateForm.recruiter,
         sourcedFrom: candidateForm.sourcedFrom === "Other"

@@ -594,9 +594,9 @@ const AllRequirements = () => {
           </div>
         ) : (
           <div className="bg-gray-900 rounded-lg border border-gray-800 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-900 border-b border-gray-800">
+            <div className="overflow-auto max-h-[650px]">
+             <table className="w-full text-sm relative min-w-[1800px]">
+            <thead className="bg-gray-900 border-b border-gray-800 sticky top-0 z-20">
                   <tr>
                     {isEmployee ? (
                       <>

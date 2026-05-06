@@ -49,9 +49,19 @@ app.post("/api/parse-resume", upload.single("file"), async (req, res) => {
       return res.status(400).json({ error: "No file uploaded" });
     }
 
-    const data = await pdfParse(req.file.buffer);
-    const text = data.text;
+  let text = "";
 
+try {
+  const data = await pdfParse(req.file.buffer);
+  text = data.text || "";
+
+} catch (pdfError) {
+  console.error("❌ Invalid PDF:", pdfError.message);
+
+  return res.status(400).json({
+    error: "Invalid or corrupted PDF file"
+  });
+}
     console.log("📄 PDF TEXT:", text.substring(0, 500));
 
     // ✅ Extract basic data
@@ -803,7 +813,64 @@ app.get("/api/candidates/:id", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+app.get("/api/candidates/:id/download-attachment/:fileId", async (req, res) => {
+  try {
+    const { id, fileId } = req.params;
 
+    console.log("📥 Download Request:");
+    console.log("Candidate ID:", id);
+    console.log("File ID:", fileId);
+
+    const candidate = await Candidate.findById(id);
+
+    if (!candidate) {
+      return res.status(404).json({
+        error: "Candidate not found"
+      });
+    }
+
+    console.log("📂 Attachments:", candidate.attachments);
+
+    const file = (candidate.attachments || []).find(
+      f =>
+        String(f.id) === String(fileId) ||
+        String(f._id) === String(fileId)
+    );
+
+    if (!file) {
+      return res.status(404).json({
+        error: "File not found"
+      });
+    }
+
+    if (!file.data) {
+      return res.status(404).json({
+        error: "File data missing"
+      });
+    }
+
+    const base64Data = file.data.includes("base64,")
+      ? file.data.split("base64,")[1]
+      : file.data;
+
+    const buffer = Buffer.from(base64Data, "base64");
+
+    res.set({
+      "Content-Type": file.type || "application/octet-stream",
+      "Content-Disposition": `inline; filename="${file.name}"`,
+      "Content-Length": buffer.length
+    });
+
+    res.send(buffer);
+
+  } catch (err) {
+    console.error("❌ Download API Error:", err);
+
+    res.status(500).json({
+      error: err.message
+    });
+  }
+});
 // ADD CANDIDATE
 app.post("/api/add-candidate", async (req, res) => {
   try {
@@ -943,7 +1010,16 @@ app.put("/api/update-candidate/:id", async (req, res) => {
       remark: req.body.remark || "",
       tags: req.body.tags || [],
       interviewRounds: req.body.interviewRounds || [],
-      attachments: req.body.attachments || [],
+      attachments: (req.body.attachments || []).map(file => ({
+  id: file.id || file._id || `${Date.now()}-${file.name}`,
+  name: file.name || "",
+  type: file.type || "",
+  size: file.size || 0,
+  uploadedAt: file.uploadedAt || new Date().toISOString(),
+
+  // ✅ preserve old data
+  data: file.data || null
+})),
       clientSections: cleanClientSections,
       updatedAt: new Date()
     };

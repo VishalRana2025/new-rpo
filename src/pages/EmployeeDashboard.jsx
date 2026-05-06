@@ -36,7 +36,9 @@ const selectedClientName = queryParams.get("name");
     return savedTheme ? savedTheme === "dark" : true;
   });
 
- const [activePage, setActivePage] = useState("home");
+const [activePage, setActivePage] = useState(() => {
+  return localStorage.getItem("activePage") || "home";
+});
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
   const handlePageChange = (page) => {
@@ -219,8 +221,7 @@ case "all-candidates":
   const userStr = localStorage.getItem("currentUser");
 const queryParams = new URLSearchParams(location.search);
 const clientName = queryParams.get("name");
-
-if (clientName) {
+if (clientName && !localStorage.getItem("activePage")) {
   setActivePage("clients");
 }
   if (!userStr && !isAdminView) {
