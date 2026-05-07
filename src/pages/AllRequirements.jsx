@@ -523,7 +523,7 @@ const AllRequirements = () => {
         )}
 
         {/* Stats Cards - Clickable */}
-        {!isEmployee && filteredRequirements.length > 0 && (
+      {filteredRequirements.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div 
               onClick={() => setStatusFilter("")}
@@ -593,21 +593,44 @@ const AllRequirements = () => {
             </button>
           </div>
         ) : (
-          <div className="bg-gray-900 rounded-lg border border-gray-800 shadow-sm overflow-hidden">
+<div className="bg-[#0f172a]/95 backdrop-blur-sm rounded-2xl border border-blue-500/10 shadow-2xl overflow-hidden">
             <div className="overflow-auto max-h-[650px]">
              <table className="w-full text-sm relative min-w-[1800px]">
-            <thead className="bg-gray-900 border-b border-gray-800 sticky top-0 z-20">
+          <thead className="bg-[#374151] border-b border-gray-500/20 sticky top-0 z-20 shadow-lg">
                   <tr>
                     {isEmployee ? (
                       <>
-                        <th className="px-4 py-3 text-left font-medium text-gray-200">Status</th>
-                        <th className="px-4 py-3 text-left font-medium text-gray-200">Client</th>
-                        <th className="px-4 py-3 text-left font-medium text-gray-200">Process</th>
-                        <th className="px-4 py-3 text-left font-medium text-gray-200">Req Date</th>
-                        <th className="px-4 py-3 text-left font-medium text-gray-200">Type</th>
-                        <th className="px-4 py-3 text-left font-medium text-gray-200">Location</th>
-                        <th className="px-4 py-3 text-left font-medium text-gray-200">Created By</th>
-                        <th className="px-4 py-3 text-left font-medium text-gray-200"></th>
+                       <th className="px-6 py-5 text-left font-semibold text-white text-sm uppercase tracking-wide">
+  Status
+</th>
+
+<th className="px-6 py-5 text-left font-semibold text-white text-sm uppercase tracking-wide">
+  Client
+</th>
+
+<th className="px-6 py-5 text-left font-semibold text-white text-sm uppercase tracking-wide">
+  Process
+</th>
+
+<th className="px-6 py-5 text-left font-semibold text-white text-sm uppercase tracking-wide">
+  Req Date
+</th>
+
+<th className="px-6 py-5 text-left font-semibold text-white text-sm uppercase tracking-wide">
+  Type
+</th>
+
+<th className="px-6 py-5 text-left font-semibold text-white text-sm uppercase tracking-wide">
+  Location
+</th>
+
+<th className="px-6 py-5 text-left font-semibold text-white text-sm uppercase tracking-wide">
+  Created By
+</th>
+
+<th className="px-6 py-5 text-left font-semibold text-white text-sm uppercase tracking-wide">
+  Actions
+</th>
                       </>
                     ) : (
                       <>
@@ -648,32 +671,67 @@ const AllRequirements = () => {
                    const fileUploads = Array.isArray(req.fileUploads) ? req.fileUploads : [];
                     
                     return (
-                      <tr key={requirementId} className={`border-b border-gray-800 hover:bg-gray-900/50 transition-colors`}>
+                     <tr
+  key={requirementId}
+  className="border-b border-gray-800 hover:bg-blue-500/5 transition-all duration-200"
+>
                         {isEmployee ? (
-                          <>
-                            <td className="px-4 py-3">
-                              <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getStatusBadgeStyle(req.requirementStatus)}`}>
-                                {req.requirementStatus || "Open"}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 font-medium text-gray-200">{req.clientName}</td>
-                            <td className="px-4 py-3 text-gray-300">{req.process}</td>
-                            <td className="px-4 py-3 text-gray-300">
-                              {req.requirementReceivedDate ? new Date(req.requirementReceivedDate).toLocaleDateString("en-IN") : "-"}
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-blue-900/50 text-blue-300 border border-blue-800">
-                                {req.requirementType}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-gray-300">{req.clientLocation || "-"}</td>
-                            <td className="px-4 py-3 text-xs text-gray-400">{req.createdByName || req.createdByEmail || "-"}</td>
-                            <td className="px-4 py-3">
-                              <button onClick={() => openDetailsModal(req)} className="text-blue-400 hover:text-blue-300 text-sm transition-colors">
-                                View
-                              </button>
-                            </td>
-                          </>
+                        <>
+  <td className="px-4 py-4">
+    <span
+      className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold shadow-sm ${getStatusBadgeStyle(
+        req.requirementStatus
+      )}`}
+    >
+      {req.requirementStatus || "Open"}
+    </span>
+  </td>
+
+  <td className="px-4 py-4">
+    <div className="font-semibold text-white">
+      {req.clientName}
+    </div>
+  </td>
+
+  <td className="px-4 py-4">
+    <div className="text-gray-300 font-medium">
+      {req.process}
+    </div>
+
+   
+  </td>
+
+  <td className="px-4 py-4 text-gray-300">
+    {req.requirementReceivedDate
+      ? new Date(req.requirementReceivedDate).toLocaleDateString("en-IN")
+      : "-"}
+  </td>
+
+  <td className="px-4 py-4">
+    <span className="inline-flex px-2.5 py-1 rounded-md text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+      {req.requirementType}
+    </span>
+  </td>
+
+  <td className="px-4 py-4 text-gray-300">
+    {req.clientLocation || "-"}
+  </td>
+
+  <td className="px-4 py-4">
+    <div className="text-xs text-gray-400">
+      {req.createdByName || req.createdByEmail || "-"}
+    </div>
+  </td>
+
+  <td className="px-4 py-4">
+    <button
+      onClick={() => openDetailsModal(req)}
+      className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white px-4 py-1.5 rounded-lg text-xs font-medium shadow-lg transition-all duration-200"
+    >
+      View
+    </button>
+  </td>
+</>
                         ) : (
                           <>
                             <td className="px-4 py-3 text-gray-300">{index + 1}</td>

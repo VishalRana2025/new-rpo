@@ -30,8 +30,8 @@ app.use(cors({
 
 // ✅ VERY IMPORTANT (preflight fix)
 app.options("*", cors());
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "100mb" }));
+app.use(express.urlencoded({ extended: true, limit: "100mb" }));
 app.use("/api/resume", resumeRoutes);
 
 // ================== FILE UPLOAD ==================
@@ -50,19 +50,25 @@ app.post("/api/parse-resume", upload.single("file"), async (req, res) => {
     }
 
   let text = "";
-
 try {
-  const data = await pdfParse(req.file.buffer);
+
+  const data = await pdfParse(req.file.buffer, {
+    max: 0,
+    verbosity: 0
+  });
+
   text = data.text || "";
 
 } catch (pdfError) {
+
   console.error("❌ Invalid PDF:", pdfError.message);
 
   return res.status(400).json({
     error: "Invalid or corrupted PDF file"
   });
 }
-    console.log("📄 PDF TEXT:", text.substring(0, 500));
+
+console.log("📄 PDF parsed successfully");
 
     // ✅ Extract basic data
     const emailMatch = text.match(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i);
@@ -561,62 +567,83 @@ app.delete("/api/delete-client/:id", async (req, res) => {
 // ================== REQUIREMENT APIs (FIXED - NO LIMIT) ==================
 
 // ✅ CREATE REQUIREMENT with Activity Log
-app.post("/api/add-requirement", upload.array("files"), async (req, res) => {
-  try {
-    if (req.body.recruiterLocation && !req.body.clientLocation) {
-      req.body.clientLocation = req.body.recruiterLocation;
-      console.log("✅ Converted recruiterLocation to clientLocation");
+app.post("/api/add-requirement", (req, res) => {
+
+ upload.fields([
+  { name: "files", maxCount: 10 },
+  { name: "fileUploads", maxCount: 10 }
+])(req, res, async (err) => {
+
+    // ✅ Multer upload error
+    if (err) {
+      console.error("❌ Multer Error:", err);
+
+      return res.status(400).json({
+        success: false,
+        message: err.message || "File upload failed"
+      });
     }
 
-    const files = req.files?.map(f => ({
-      name: f.originalname,
-      data: f.buffer.toString("base64"),
-      type: f.mimetype,
-      size: f.size,
-      uploadedAt: new Date().toISOString()
-    })) || [];
-
-    let dynamicFields = [];
     try {
-      if (req.body.dynamicFieldsConfig) {
-        dynamicFields = JSON.parse(req.body.dynamicFieldsConfig);
+
+      if (req.body.recruiterLocation && !req.body.clientLocation) {
+        req.body.clientLocation = req.body.recruiterLocation;
       }
-    } catch (e) {
-      console.log("Error parsing dynamicFieldsConfig:", e);
+
+const uploadedFiles = [
+  ...(req.files?.files || []),
+  ...(req.files?.fileUploads || [])
+];
+
+const files = uploadedFiles.map(f => ({
+  name: f.originalname,
+  data: f.buffer.toString("base64"),
+  type: f.mimetype,
+  size: f.size,
+  uploadedAt: new Date().toISOString()
+}));
+      let dynamicFields = [];
+
+      try {
+        if (req.body.dynamicFieldsConfig) {
+          dynamicFields = JSON.parse(req.body.dynamicFieldsConfig);
+        }
+      } catch (e) {
+        console.log("Error parsing dynamicFieldsConfig:", e);
+      }
+
+      const newReq = new Requirement({
+        ...req.body,
+        dynamicFieldsConfig: JSON.stringify(dynamicFields),
+        fileUploads: files,
+      });
+
+      dynamicFields.forEach(field => {
+        const key = `dynamic_${field.id}`;
+
+        if (field.value) {
+          newReq[key] = field.value;
+        }
+      });
+
+      const saved = await newReq.save();
+
+      console.log(`✅ Requirement saved with ID: ${saved._id}`);
+
+      res.status(201).json(saved);
+
+    } catch (error) {
+
+      console.error("❌ Save Error:", error);
+
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
     }
 
-    const newReq = new Requirement({
-      ...req.body,
-      dynamicFieldsConfig: JSON.stringify(dynamicFields),
-      fileUploads: files,
-    });
+  });
 
-    dynamicFields.forEach(field => {
-      const key = `dynamic_${field.id}`;
-      if (field.value) {
-        newReq[key] = field.value;
-      }
-    });
-
-    const saved = await newReq.save();
-    console.log(`✅ Requirement saved with ID: ${saved._id}`);
-    
-    // ✅ Activity Log for CREATE Requirement
-    await ActivityLog.create({
-      action: "CREATE",
-      module: "requirement",
-      itemId: saved._id,
-      itemName: saved.clientName || saved.requirementName || "Requirement",
-      userName: req.body.createdByName || req.body.userName || "System"
-    });
-    
-    console.log(`   Dynamic fields saved: ${dynamicFields.length}`);
-    
-    res.status(201).json(saved);
-  } catch (err) {
-    console.error("Error saving requirement:", err);
-    res.status(500).json({ message: "Error saving requirement", error: err.message });
-  }
 });
 
 // ✅ FIX 4: GET requirements - NO LIMIT
@@ -829,7 +856,7 @@ app.get("/api/candidates/:id/download-attachment/:fileId", async (req, res) => {
       });
     }
 
-    console.log("📂 Attachments:", candidate.attachments);
+    console.log("📂 Attachments Count:", candidate.attachments?.length || 0);
 
     const file = (candidate.attachments || []).find(
       f =>

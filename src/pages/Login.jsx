@@ -59,7 +59,7 @@ const Login = () => {
 
         localStorage.setItem("currentUser", JSON.stringify(adminUser));
         localStorage.setItem("role", "admin");
-        localStorage.setItem("activePage", "admin-dashboard");
+      localStorage.setItem("activePage", "home");
         
         // Save remember me
         if (rememberMe) {

@@ -53,6 +53,12 @@ const AllCandidates = () => {
     }
 
     try {
+      const fullCandidate = await getFullCandidate(candidateId);
+
+if (!fullCandidate) {
+  alert("Candidate not found");
+  return;
+}
       const response = await api.get(
   `/candidates/${candidateId}/download-attachment/${file.id || file._id}`, {
         responseType: 'blob'
@@ -690,10 +696,12 @@ const handleEdit = async (candidate) => {
         });
       }
 const existingAttachments = Array.isArray(editCandidate.attachments)
-  ? editCandidate.attachments.map(file => ({
-      ...file,
-      id: file.id || file._id || `${Date.now()}-${file.name}`
-    }))
+  ? editCandidate.attachments
+      .filter(file => file && (file.id || file._id))
+      .map(file => ({
+        ...file,
+        id: file.id || file._id || `${Date.now()}-${file.name}`
+      }))
   : [];
       const allAttachments = [...existingAttachments, ...newAttachments];
       
@@ -731,14 +739,16 @@ const existingAttachments = Array.isArray(editCandidate.attachments)
         status: safeCandidate.status,
         remark: safeCandidate.remark || "",
         tags: safeCandidate.tags || [],
-       attachments: allAttachments.map(file => ({
-  id: file.id,
-  name: file.name,
-  type: file.type,
-  size: file.size,
-  uploadedAt: file.uploadedAt || new Date().toISOString(),
-  data: file.data || ""
-})),
+    attachments: allAttachments
+  .filter(file => file && (file.id || file._id))
+  .map(file => ({
+    id: file.id,
+    name: file.name,
+    type: file.type,
+    size: file.size,
+    uploadedAt: file.uploadedAt || new Date().toISOString(),
+    data: file.data
+  })),
         interviewRounds: safeInterviewRounds,
         clientSections: (Array.isArray(clientSections) ? clientSections : []).map(sec => ({
           clientName: sec?.clientName || "",
@@ -1394,8 +1404,8 @@ if (fullUpdatedCandidate) {
                           </div>
                         </div>
                         <div className="flex gap-1">
-                          <button onClick={() => previewFileHandler(file, editCandidate._id)} className="px-2 py-1 bg-green-500 text-white text-xs rounded">Preview</button>
-                          <button onClick={() => downloadFile(file, editCandidate._id)} className="px-2 py-1 bg-blue-500 text-white text-xs rounded">Download</button>
+                          {/* <button onClick={() => previewFileHandler(file, editCandidate._id)} className="px-2 py-1 bg-green-500 text-white text-xs rounded">Preview</button>
+                          <button onClick={() => downloadFile(file, editCandidate._id)} className="px-2 py-1 bg-blue-500 text-white text-xs rounded">Download</button> */}
                           <button onClick={() => removeExistingFile(idx)} className="px-2 py-1 bg-red-500 hover:bg-red-600 text-white text-xs rounded">Remove</button>
                         </div>
                       </div>

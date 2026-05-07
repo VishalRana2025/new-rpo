@@ -26,30 +26,55 @@ const Home = () => {
     requirement: { create: 0, update: 0, delete: 0 },
   });
   const [loading, setLoading] = useState(false);
-  const [filterDays, setFilterDays] = useState(30);
+ const [filterDays, setFilterDays] = useState(7);
   const [allClients, setAllClients] = useState([]);
   const [openClientData, setOpenClientData] = useState([]);
   const [closedClientData, setClosedClientData] = useState([]);
+  const [designationData, setDesignationData] = useState([]);
   
   // Popup state
   const [popupOpen, setPopupOpen] = useState(false);
   const [popupData, setPopupData] = useState(null);
 
   // GROUPING FUNCTION - Groups activities by recruiter/userName
-  const groupByUser = (activities) => {
-    const map = {};
-    const limitedActivities = activities.slice(0, 200);
-    limitedActivities.forEach((act) => {
-      const user = act.userName;
-      if (!user || user === "System") return;
-      if (!map[user]) map[user] = 0;
-      map[user]++;
+ const groupByUser = (activities) => {
+
+  const map = {};
+
+  const limitedActivities = activities.slice(0, 200);
+
+  limitedActivities.forEach((act) => {
+
+    const user = act.userName || "Unknown";
+
+    if (user === "System") return;
+
+    if (!map[user]) {
+      map[user] = {
+        count: 0,
+        candidates: []
+      };
+    }
+
+    map[user].count++;
+
+    map[user].candidates.push({
+      candidateName: act.itemName || "Unknown Candidate",
+      action: act.action,
+      date: act.createdAt
     });
-    return Object.keys(map).map((user) => ({
+
+  });
+
+  return Object.keys(map)
+    .map((user) => ({
       user,
-      count: map[user],
-    })).sort((a, b) => b.count - a.count).slice(0, 20);
-  };
+      count: map[user].count,
+      candidates: map[user].candidates
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 20);
+};
 
   // Format chart data with createDetails and updateDetails
   const formatChartData = (data, activities) => {
@@ -146,6 +171,44 @@ const Home = () => {
 
       const allCandidates = candidatesRes.data || [];
       const candidates = allCandidates.slice(0, 200);
+      const designationMap = {};
+
+candidates.forEach((candidate) => {
+
+  const lastSection = candidate.clientSections?.length
+    ? candidate.clientSections[candidate.clientSections.length - 1]
+    : null;
+const designation =
+  lastSection?.designation?.trim() ||
+  candidate.designation?.trim() ||
+  "No Designation";
+
+  if (!designationMap[designation]) {
+    designationMap[designation] = {
+      count: 0,
+      candidates: []
+    };
+  }
+
+  designationMap[designation].count++;
+
+  designationMap[designation].candidates.push({
+  name: `${candidate.firstName || ""} ${candidate.lastName || ""}`,
+  clientName: lastSection?.clientName || "Unknown Client",
+  status: candidate.status || "N/A"
+});
+
+});
+
+const formattedDesignationData = Object.keys(designationMap)
+  .map((designation) => ({
+    designation,
+    count: designationMap[designation].count,
+    candidates: designationMap[designation].candidates
+  }))
+  .sort((a, b) => b.count - a.count);
+
+setDesignationData(formattedDesignationData);
       const activities = activitiesRes.data || [];
 
       let candidateFormatted = formatChartData(candidateRes.data, activities);
@@ -331,7 +394,18 @@ const Home = () => {
     if (!data || !data.date) return;
     navigate(`/clients?name=${encodeURIComponent(data.date)}`);
   };
+const handleDesignationClick = (item) => {
 
+  setPopupData({
+    actionType: item.designation,
+    details: item.candidates,
+    count: item.count,
+    date: item.designation,
+    type: "designation"
+  });
+
+  setPopupOpen(true);
+};
   const closePopup = () => {
     setPopupOpen(false);
     setPopupData(null);
@@ -527,6 +601,76 @@ const Home = () => {
         </div>
 
         
+{/* DESIGNATION SECTION */}
+
+<div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700 mb-8">
+
+  <div className="flex items-center justify-between mb-4">
+    <h2 className="text-xl font-bold text-white">
+      💼  Candidates Wise Clients
+    </h2>
+
+   <div className="flex items-center gap-2">
+
+  {designationData
+    .filter((item) => item.designation === "No Designation")
+    .map((item, idx) => (
+      <div
+        key={idx}
+        onClick={() => handleDesignationClick(item)}
+       className="text-sm font-semibold text-red-300 bg-red-500/10 border border-red-500/20 px-5 py-2 rounded-xl cursor-pointer hover:bg-red-500/20 hover:border-red-500/40 transition-all duration-200 shadow-sm"
+      >
+        No Designation: {item.count}
+      </div>
+  ))}
+
+  <div className="text-sm text-blue-400 bg-blue-500/10 px-3 py-1 rounded-full">
+    Total Designations: {designationData.length}
+  </div>
+
+</div>
+  </div>
+
+  {designationData.length === 0 ? (
+
+    <div className="text-center py-8 text-gray-400">
+      No designation data found
+    </div>
+
+  ) : (
+
+<div className="max-h-[400px] overflow-y-auto pr-2 scrollbar-hide mt-2">
+
+      <div className="space-y-2">
+
+{designationData.map((item, idx) => (
+  
+       <div
+  key={idx}
+  onClick={() => handleDesignationClick(item)}
+className="w-full h-[64px] bg-[#0f172a] border border-gray-700 rounded-md px-4 flex items-center justify-between hover:bg-blue-500/5 hover:border-blue-500/30 transition-all duration-200 cursor-pointer">
+    <div className="flex items-center justify-between w-full gap-3">
+
+            <span className="text-gray-200 text-sm font-semibold truncate whitespace-nowrap overflow-hidden group-hover:text-white transition-colors">
+              {item.designation}
+            </span>
+
+         <span className="text-blue-400 font-bold text-xl flex-shrink-0">
+              {item.count}
+            </span>
+
+          </div>
+
+        </div>
+
+      ))}
+</div>
+    </div>
+
+  )}
+
+</div>
+        
 
         {/* CLOSED CLIENTS */}
         <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
@@ -543,7 +687,7 @@ const Home = () => {
               <p>No closed clients with "Joined" status yet</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
               {closedClientData.map((client, idx) => (
                 <div
                   key={idx}

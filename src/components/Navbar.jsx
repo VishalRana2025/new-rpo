@@ -1,9 +1,8 @@
 import React from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 const Navbar = () => {
   const navigate = useNavigate();
-  const location = useLocation();
 
   const currentUser = JSON.parse(localStorage.getItem('currentUser'));
   const role = currentUser?.role?.toLowerCase();
@@ -12,13 +11,15 @@ const Navbar = () => {
     localStorage.removeItem('currentUser');
     localStorage.removeItem('role');
     localStorage.removeItem('activePage');
+
     navigate('/login');
   };
 
-  // ✅ Keep current page after refresh
- const goToHome = () => {
-  navigate('/');
-};
+  const goToHome = () => {
+    localStorage.setItem("activePage", "home");
+
+    navigate("/");
+  };
 
   return (
     <nav className="bg-blue-600 text-white p-4 shadow-lg">
