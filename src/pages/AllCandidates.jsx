@@ -433,7 +433,27 @@ if (!fullCandidate) {
   };
 
   const filteredData = applyFilters(data);
+const totalCandidates = data.length;
 
+const updatedCandidates = data.filter(
+  (c) => c.updatedAt && c.createdAt !== c.updatedAt
+).length;
+
+const joinedCandidates = data.filter((c) =>
+  c.clientSections?.some(
+    (s) =>
+      s.clientStatus &&
+      s.clientStatus.toLowerCase() === "joined"
+  )
+).length;
+
+const pendingCandidates = data.filter(
+  (c) =>
+    c.status &&
+    c.status.toLowerCase() === "pending"
+).length;
+
+const deletedCandidates = 0;
   const sortedData = [...filteredData].sort((a, b) => {
     if (!sortField) return 0;
     
@@ -1515,7 +1535,33 @@ if (fullUpdatedCandidate) {
             </div>
           </div>
         </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
 
+  {/* TOTAL */}
+  <div className="bg-gray-800 border border-gray-700 rounded-xl px-4 py-3">
+    <p className="text-gray-400 text-sm">TOTAL</p>
+    <h2 className="text-4xl font-bold text-white mt-1">
+      {totalCandidates}
+    </h2>
+  </div>
+
+  {/* UPDATED */}
+  <div className="bg-gray-800 border border-gray-700 rounded-xl px-4 py-3">
+    <p className="text-gray-400 text-sm">UPDATED</p>
+    <h2 className="text-4xl font-bold text-yellow-400 mt-1">
+      {updatedCandidates}
+    </h2>
+  </div>
+
+  {/* JOINED */}
+  <div className="bg-gray-800 border border-gray-700 rounded-xl px-4 py-3">
+    <p className="text-gray-400 text-sm">JOINED</p>
+    <h2 className="text-4xl font-bold text-green-400 mt-1">
+      {joinedCandidates}
+    </h2>
+  </div>
+
+</div>
         {/* Active Quick Filter Display */}
         {activeQuickFilter && quickFilterValue && (
           <div className="mb-4 flex items-center gap-2">

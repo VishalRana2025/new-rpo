@@ -122,13 +122,14 @@ const userSchema = new mongoose.Schema({
   isActive: { type: Boolean, default: true },
   
   permissions: {
-    newClient: { type: Boolean, default: false },
-    allClients: { type: Boolean, default: false },
-    newRequirement: { type: Boolean, default: false },
-    allRequirement: { type: Boolean, default: false },
-    newCandidate: { type: Boolean, default: false },
-    allCandidates: { type: Boolean, default: false },
-  },
+  newClient: { type: Boolean, default: false },
+  allClients: { type: Boolean, default: false },
+  newRequirement: { type: Boolean, default: false },
+  allRequirement: { type: Boolean, default: false },
+  newCandidate: { type: Boolean, default: false },
+  allCandidates: { type: Boolean, default: false },
+  paymentPanel: { type: Boolean, default: false },
+},
   registeredAt: { type: Date, default: Date.now },
   profileImage: String,
   attendance: Array,
@@ -200,14 +201,15 @@ app.post("/api/register", async (req, res) => {
       role: role || "employee",
       isApproved: false,
       isActive: true,
-      permissions: {
-        newClient: false,
-        allClients: false,
-        newRequirement: false,
-        allRequirement: false,
-        newCandidate: false,
-        allCandidates: false,
-      },
+     permissions: {
+  newClient: false,
+  allClients: false,
+  newRequirement: false,
+  allRequirement: false,
+  newCandidate: false,
+  allCandidates: false,
+  paymentPanel: false,
+},
       registeredAt: new Date(),
     });
 
@@ -409,36 +411,39 @@ app.put("/api/users/:userId/role", async (req, res) => {
     let permissions = {};
 
     if (role === "admin") {
-      permissions = {
-        newClient: true,
-        allClients: true,
-        newRequirement: true,
-        allRequirement: true,
-        newCandidate: true,
-        allCandidates: true,
-      };
+permissions = {
+  newClient: true,
+  allClients: true,
+  newRequirement: true,
+  allRequirement: true,
+  newCandidate: true,
+  allCandidates: true,
+  paymentPanel: true,
+};
     }
 
     if (role === "manager") {
       permissions = {
-        newClient: true,
-        allClients: true,
-        newRequirement: true,
-        allRequirement: false,
-        newCandidate: true,
-        allCandidates: true,
-      };
+  newClient: true,
+  allClients: true,
+  newRequirement: true,
+  allRequirement: false,
+  newCandidate: true,
+  allCandidates: true,
+  paymentPanel: true,
+};
     }
 
     if (role === "employee") {
-      permissions = {
-        newClient: true,
-        allClients: false,
-        newRequirement: false,
-        allRequirement: false,
-        newCandidate: true,
-        allCandidates: false,
-      };
+     permissions = {
+  newClient: true,
+  allClients: false,
+  newRequirement: false,
+  allRequirement: false,
+  newCandidate: true,
+  allCandidates: false,
+  paymentPanel: false,
+};
     }
 
     const user = await User.findByIdAndUpdate(

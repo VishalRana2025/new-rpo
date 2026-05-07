@@ -114,7 +114,7 @@ formatter: function (params) {
     grid: {
       left: "3%",
       right: "4%",
-      bottom: "3%",
+      bottom: "18%",
       top: "8%",
       containLabel: true
     },
@@ -124,9 +124,16 @@ formatter: function (params) {
       axisLine: { lineStyle: { color: "#444" } },
 axisLabel: {
   color: "#ccc",
-rotate: 0,
-  fontSize: isClientChart ? 10 : 11,
-  interval: isClientChart ? 0 : undefined,
+  rotate:
+  window.innerWidth < 640
+    ? (isClientChart ? 0 : 35)
+    : 0,
+ fontSize:
+  window.innerWidth < 640
+    ? (isClientChart ? 8 : 9)
+    : 11,
+  interval: 0,
+  margin: 14,
  formatter: function (value) {
   if (!isClientChart) return value;
 
@@ -154,7 +161,7 @@ rotate: 0,
     },
     yAxis: {
       type: "value",
-      name: "Number of Candidates",
+      name: "",
       nameTextStyle: { color: "#aaa" },
       axisLine: { lineStyle: { color: "#444" } },
       splitLine: { lineStyle: { color: "#333", type: "dashed" } },

@@ -32,16 +32,16 @@ const Navbar = () => {
                 onClick={goToHome}
                 className="hover:text-gray-200 transition font-semibold"
               >
-                🏠 Home
+               Recruiter  App
               </button>
 
-              <span className="text-xs bg-blue-500 px-2 py-1 rounded">
+              {/* <span className="text-xs bg-blue-500 px-2 py-1 rounded">
                 {role === 'admin'
                   ? 'Admin'
                   : role === 'manager'
                   ? 'Manager'
                   : 'Employee'}
-              </span>
+              </span> */}
             </>
           )}
         </div>

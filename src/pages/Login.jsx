@@ -46,14 +46,15 @@ const Login = () => {
           role: "admin",
           isApproved: true,
           isActive: true,
-          permissions: {
-            newClient: true,
-            allClients: true,
-            newRequirement: true,
-            allRequirement: true,
-            newCandidate: true,
-            allCandidates: true
-          },
+         permissions: {
+  newClient: true,
+  allClients: true,
+  newRequirement: true,
+  allRequirement: true,
+  newCandidate: true,
+  allCandidates: true,
+  paymentPanel: true
+},
           companyLocation: COMPANY_LOCATION
         };
 
@@ -101,14 +102,15 @@ const Login = () => {
         }
 
         // Ensure permissions exist
-        const userPermissions = user.permissions || {
-          newClient: false,
-          allClients: false,
-          newRequirement: false,
-          allRequirement: false,
-          newCandidate: false,
-          allCandidates: false
-        };
+       const userPermissions = user.permissions || {
+  newClient: false,
+  allClients: false,
+  newRequirement: false,
+  allRequirement: false,
+  newCandidate: false,
+  allCandidates: false,
+  paymentPanel: false
+};
 
         // Store user data
         localStorage.setItem("currentUser", JSON.stringify({
@@ -135,24 +137,8 @@ const Login = () => {
           localStorage.removeItem("rememberedEmail");
         }
 
-        // Set default page based on permissions
-        if (user.role === "admin") {
-          localStorage.setItem("activePage", "admin-dashboard");
-        } else if (userPermissions?.newCandidate) {
-          localStorage.setItem("activePage", "candidate-detail");
-        } else if (userPermissions?.allCandidates) {
-          localStorage.setItem("activePage", "all-candidates");
-        } else if (userPermissions?.newClient) {
-          localStorage.setItem("activePage", "onboarding");
-        } else if (userPermissions?.allClients) {
-          localStorage.setItem("activePage", "clients");
-        } else if (userPermissions?.newRequirement) {
-          localStorage.setItem("activePage", "requirements");
-        } else if (userPermissions?.allRequirement) {
-          localStorage.setItem("activePage", "all-requirements");
-        } else {
-          localStorage.setItem("activePage", "dashboard");
-        }
+      // Always open Home page after login
+localStorage.setItem("activePage", "home");
 
         alert(`Welcome back ${user.name || user.email}!`);
         setLoading(false);

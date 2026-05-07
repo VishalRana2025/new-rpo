@@ -39,7 +39,8 @@ const AdminDashboard = () => {
     newRequirement: false,
     allRequirement: false,
     newCandidate: false,
-    allCandidates: false
+    allCandidates: false,
+      paymentPanel: false
   });
 
   // Security check - Must be admin to access this page
@@ -108,14 +109,15 @@ const AdminDashboard = () => {
 
       const usersWithPermissions = sortedUsers.map(user => ({
         ...user,
-        permissions: {
-          newClient: user.permissions?.newClient || false,
-          allClients: user.permissions?.allClients || false,
-          newRequirement: user.permissions?.newRequirement || false,
-          allRequirement: user.permissions?.allRequirement || false,
-          newCandidate: user.permissions?.newCandidate || false,
-          allCandidates: user.permissions?.allCandidates || false
-        },
+       permissions: {
+  newClient: user.permissions?.newClient || false,
+  allClients: user.permissions?.allClients || false,
+  newRequirement: user.permissions?.newRequirement || false,
+  allRequirement: user.permissions?.allRequirement || false,
+  newCandidate: user.permissions?.newCandidate || false,
+  allCandidates: user.permissions?.allCandidates || false,
+  paymentPanel: user.permissions?.paymentPanel || false
+},
         isApproved: user.isApproved !== undefined ? user.isApproved : true,
         isActive: user.isActive !== undefined ? user.isActive : true,
         firstName: user.name?.split(" ")[0] || "",
@@ -251,32 +253,35 @@ const AdminDashboard = () => {
   const getPermissionsByRole = (role) => {
     switch(role) {
       case "admin":
-        return {
-          newClient: true,
-          allClients: true,
-          newRequirement: true,
-          allRequirement: true,
-          newCandidate: true,
-          allCandidates: true
-        };
+       return {
+  newClient: true,
+  allClients: true,
+  newRequirement: true,
+  allRequirement: true,
+  newCandidate: true,
+  allCandidates: true,
+  paymentPanel: true
+};
       case "manager":
-        return {
-          newClient: true,
-          allClients: true,
-          newRequirement: true,
-          allRequirement: false,
-          newCandidate: true,
-          allCandidates: true
-        };
+      return {
+  newClient: true,
+  allClients: true,
+  newRequirement: true,
+  allRequirement: false,
+  newCandidate: true,
+  allCandidates: true,
+  paymentPanel: true
+};
       case "employee":
         return {
-          newClient: true,
-          allClients: false,
-          newRequirement: false,
-          allRequirement: false,
-          newCandidate: true,
-          allCandidates: false
-        };
+  newClient: true,
+  allClients: false,
+  newRequirement: false,
+  allRequirement: false,
+  newCandidate: true,
+  allCandidates: false,
+  paymentPanel: false
+};
       default:
         return {
           newClient: false,
@@ -995,6 +1000,16 @@ const AdminDashboard = () => {
                                     />
                                     <span>📄 All Candidates</span>
                                   </label>
+                                  <label className="flex items-center gap-1">
+  <input
+    type="checkbox"
+    checked={tempPermissions[user._id]?.paymentPanel || false}
+    onChange={() => updateTempPermission(user._id, "paymentPanel")}
+    className="w-3 h-3"
+    disabled={loading || !isMainAdmin}
+  />
+  <span>💳 Payment Panel</span>
+</label>
                                 </div>
                                 {hasPermissionChanges(user._id) && isMainAdmin && (
                                   <button

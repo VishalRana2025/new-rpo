@@ -24,7 +24,8 @@ const selectedClientName = queryParams.get("name");
   newRequirement: false,
   allRequirement: false,
   newCandidate: false,
-  allCandidates: false
+  allCandidates: false,
+  paymentPanel: false
 });
 
   const isAdmin = currentUser?.role?.toLowerCase() === "admin";
@@ -202,7 +203,7 @@ const [activePage, setActivePage] = useState(() => {
    case "candidate":
   return userPermissions.newCandidate === true;
 case "recruiter-payment":
-  return isAdmin;
+  return userPermissions.paymentPanel === true;
 case "all-candidates":
   return userPermissions.allCandidates === true;
     case "onboarding":
@@ -213,6 +214,7 @@ case "all-candidates":
       return userPermissions.newRequirement === true;
     case "all-requirements":
       return userPermissions.allRequirement === true;
+      
     default:
       return false;
   }
@@ -315,6 +317,7 @@ const allowed = ["home"];
 
   if (userPermissions.newCandidate) allowed.push("candidate");
 if (userPermissions.allCandidates) allowed.push("all-candidates");
+if (userPermissions.paymentPanel) allowed.push("recruiter-payment");
 
   return allowed;
 };
@@ -1082,7 +1085,7 @@ localStorage.removeItem("dashboardCache");
     onClick={() => handlePageChange("admin")}
     className="px-6 py-3 cursor-pointer transition-colors flex items-center gap-2 hover:bg-blue-500"
   >
-    <span>🛠️</span> Admin
+    <span></span>   User Management
   </li>
 )}
 
@@ -1122,7 +1125,7 @@ localStorage.removeItem("dashboardCache");
   </li>
 )}
 
-{isAdmin && (
+{isPageAllowed("recruiter-payment") && (
   <li
     onClick={() => handlePageChange("recruiter-payment")}
     className={`px-6 py-3 cursor-pointer flex items-center gap-2 ${
@@ -1131,7 +1134,7 @@ localStorage.removeItem("dashboardCache");
         : "hover:bg-blue-500"
     }`}
   >
-    <span>💰</span> Recruiter Payment
+    <span>💰</span> Payment Panel
   </li>
 )}
         </ul>
@@ -1193,8 +1196,10 @@ localStorage.removeItem("dashboardCache");
               <RequirementForm />
             </div>
           )}
-          {activePage === "recruiter-payment" && isAdmin && <RecruiterPayment />}
-
+          {activePage === "recruiter-payment" &&
+  isPageAllowed("recruiter-payment") && (
+    <RecruiterPayment />
+)}
           {/* All Requirements Page */}
           {(activePage === "all-requirements") && (isAdmin || (currentUser?.isApproved && userPermissions.allRequirement)) && (
             <div className={`${themeStyles.card} p-4 sm:p-6 rounded-lg shadow-lg`}>

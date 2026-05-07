@@ -30,6 +30,7 @@ const Home = () => {
   const [allClients, setAllClients] = useState([]);
   const [openClientData, setOpenClientData] = useState([]);
   const [closedClientData, setClosedClientData] = useState([]);
+  const [joinedCandidates, setJoinedCandidates] = useState([]);
   const [designationData, setDesignationData] = useState([]);
   
   // Popup state
@@ -142,6 +143,7 @@ const Home = () => {
         setAllClients(parsed.allClients || []);
         setOpenClientData(parsed.openClientData || []);
         setClosedClientData(parsed.closedClientData || []);
+        setJoinedCandidates(parsed.joinedCandidates || []);
         return true;
       }
     } catch (err) {
@@ -166,11 +168,11 @@ const Home = () => {
         api.get("/recent-activities?limit=100"),
         api.get("/activity-summary"),
         api.get("/clients"),
-        api.get("/candidates?limit=100")
+       api.get("/candidates")
       ]);
 
       const allCandidates = candidatesRes.data || [];
-      const candidates = allCandidates.slice(0, 200);
+     const candidates = allCandidates;
       const designationMap = {};
 
 candidates.forEach((candidate) => {
@@ -307,30 +309,55 @@ setDesignationData(formattedDesignationData);
       })).sort((a, b) => b.count - a.count).slice(0, 50);
       
       setOpenClientData(formattedClients);
+const closedMap = {};
+const joinedList = [];
 
-      const closedMap = {};
-      for (const c of candidates) {
-        let lastClient = null;
-        let lastStatus = null;
-        if (Array.isArray(c.clientSections) && c.clientSections.length > 0) {
-          for (let i = c.clientSections.length - 1; i >= 0; i--) {
-            const section = c.clientSections[i];
-            if (
-              section.clientName && 
-              section.clientName.trim() !== "" &&
-              section.clientStatus?.toLowerCase() !== "rejected- client"
-            ) {
-              lastClient = section.clientName.trim();
-              lastStatus = section.clientStatus;
-              break;
-            }
-          }
-        }
-        const status = lastStatus?.toString().trim().toLowerCase();
-        if (!lastClient || !status || status !== "joined") continue;
-        const clientName = clientNameMap[lastClient.toLowerCase()] || lastClient;
-        closedMap[clientName] = (closedMap[clientName] || 0) + 1;
-      }
+for (const c of candidates) {
+
+  if (!Array.isArray(c.clientSections)) continue;
+
+  c.clientSections.forEach((section) => {
+
+    const clientName = section.clientName?.trim();
+
+    const status = section.clientStatus
+      ?.toString()
+      .trim()
+      .toLowerCase();
+
+  if (
+  clientName &&
+  status &&
+ status === "joined"
+) {
+
+  const finalClientName =
+    clientNameMap[clientName.toLowerCase()] || clientName;
+
+  closedMap[finalClientName] =
+    (closedMap[finalClientName] || 0) + 1;
+
+joinedList.push({
+  candidateName:
+    `${c.firstName || ""} ${c.lastName || ""}`.trim(),
+
+  clientName: finalClientName,
+
+  designation:
+    section.designation ||
+    c.designation ||
+    "No Designation",
+
+  status: section.clientStatus || "Joined",
+
+ joinedDate: section.joinedDate || ""
+});
+
+}
+
+  });
+
+}
       
       const closedClients = Object.keys(closedMap).map(name => ({
         clientName: name,
@@ -338,10 +365,12 @@ setDesignationData(formattedDesignationData);
       })).sort((a, b) => b.count - a.count).slice(0, 50);
       
       setClosedClientData(closedClients);
+      setJoinedCandidates(joinedList);
 
       const cacheData = {
         createdData: createdOnly,
         updatedData: updatedOnly,
+        joinedCandidates: joinedList,
         recentActivities: activities.slice(0, 15),
         summaryStats: summaryData,
         allClients: chartClients,
@@ -445,23 +474,23 @@ const handleDesignationClick = (item) => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
-      <div className="max-w-[1600px] mx-auto p-6">
+   <div className="min-h-screen overflow-x-hidden bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+    <div className="w-full max-w-[1600px] mx-auto px-3 sm:px-4 md:px-6 lg:px-8">
         
         {/* Header */}
         <div className="mb-8">
-          <div className="flex justify-between items-start">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-start gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-white tracking-tight">Candidate Dashboard</h1>
+           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white tracking-tight">Candidate Dashboard</h1>
               <p className="text-gray-400 mt-2">Real-time activity monitoring & analytics</p>
             </div>
-            <button
+            {/* <button
               onClick={handleClearCache}
               className="text-xs text-gray-500 hover:text-red-400 transition-colors"
               title="Clear cache"
             >
               🗑️ Clear Cache
-            </button>
+            </button> */}
           </div>
           {/* Cache status indicator */}
           {localStorage.getItem("dashboardCache") && (() => {
@@ -481,7 +510,7 @@ const handleDesignationClick = (item) => {
         </div>
 
         {/* TOP CARDS */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6 mb-8">
           <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700 hover:border-gray-600 transition-all group">
             <div className="flex items-center justify-between mb-3">
               <p className="text-gray-400 text-sm font-medium">Total Activities</p>
@@ -576,7 +605,7 @@ const handleDesignationClick = (item) => {
         {/* CLIENTS DISTRIBUTION CHART */}
         <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700 mb-8">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-white">🏢 All Clients Distribution</h2>
+            <h2 className="text-xl font-bold text-white">🏢 Open Candidates On Clients</h2>
             <div className="text-sm text-blue-400 bg-blue-500/10 px-3 py-1 rounded-full">
               Total Clients: {allClients.length}
             </div>
@@ -607,7 +636,7 @@ const handleDesignationClick = (item) => {
 
   <div className="flex items-center justify-between mb-4">
     <h2 className="text-xl font-bold text-white">
-      💼  Candidates Wise Clients
+      💼  Open Candidates On Requirements
     </h2>
 
    <div className="flex items-center gap-2">
@@ -643,7 +672,9 @@ const handleDesignationClick = (item) => {
 
       <div className="space-y-2">
 
-{designationData.map((item, idx) => (
+{designationData
+  .filter((item) => item.designation !== "No Designation")
+  .map((item, idx) => (
   
        <div
   key={idx}
@@ -675,34 +706,76 @@ className="w-full h-[64px] bg-[#0f172a] border border-gray-700 rounded-md px-4 f
         {/* CLOSED CLIENTS */}
         <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-white">🎯 Closed Clients (Joined)</h2>
+            <h2 className="text-xl font-bold text-white">🎯 Candidates Joined</h2>
             <div className="text-sm text-green-400 bg-green-500/10 px-3 py-1 rounded-full">
-              Total Joined: {closedClientData.reduce((sum, c) => sum + c.count, 0)}
+             Total Joined: {joinedCandidates.length}
             </div>
           </div>
 
-          {closedClientData.length === 0 ? (
+         {joinedCandidates.length === 0 ? (
             <div className="text-center py-8 text-gray-400">
               <div className="text-4xl mb-2">🎯</div>
               <p>No closed clients with "Joined" status yet</p>
             </div>
           ) : (
-            <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
-              {closedClientData.map((client, idx) => (
-                <div
-                  key={idx}
-                  className="bg-gradient-to-r from-green-900/20 to-gray-900/50 border border-green-500/20 rounded-lg p-4 hover:border-green-500/40 transition-all group cursor-pointer"
-                  onClick={() => navigate(`/clients?name=${encodeURIComponent(client.clientName)}`)}
-                >
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-300 font-medium group-hover:text-green-400 transition-colors">
-                      {client.clientName}
-                    </span>
-                    <span className="text-green-400 font-bold text-lg">{client.count}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+          <div className="overflow-x-auto rounded-lg border border-gray-700">
+
+  <table className="w-full min-w-[900px] text-sm text-left text-gray-300">
+
+    <thead className="bg-gray-900/80 text-gray-400 uppercase text-xs">
+
+      <tr>
+        <th className="px-4 py-3">Candidate Name</th>
+        <th className="px-4 py-3">Client Name</th>
+        <th className="px-4 py-3">Designation</th>
+        <th className="px-4 py-3">Status</th>
+        <th className="px-4 py-3">Joined Date</th>
+      </tr>
+
+    </thead>
+
+    <tbody>
+
+      {joinedCandidates.map((item, idx) => (
+
+        <tr
+          key={idx}
+          className="border-b border-gray-700 hover:bg-gray-700/20 transition-all"
+        >
+
+          <td className="px-4 py-3 text-white font-medium">
+            {item.candidateName}
+          </td>
+
+          <td className="px-4 py-3 text-blue-400">
+            {item.clientName}
+          </td>
+
+          <td className="px-4 py-3">
+            {item.designation}
+          </td>
+
+          <td className="px-4 py-3">
+            <span className="bg-green-500/10 text-green-400 px-3 py-1 rounded-full text-xs font-semibold">
+              {item.status}
+            </span>
+          </td>
+
+       <td className="px-4 py-3 text-gray-400">
+  {item.joinedDate
+    ? new Date(item.joinedDate).toLocaleDateString("en-GB")
+    : "N/A"}
+</td>
+
+        </tr>
+
+      ))}
+
+    </tbody>
+
+  </table>
+
+</div>
           )}
         </div>
 
