@@ -660,7 +660,7 @@ const AdminDashboard = () => {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-gray-900 text-white">
+   <main className="flex flex-col min-h-screen bg-gray-900 text-white">
       
       {/* Mobile Menu Button */}
       <button
@@ -805,7 +805,7 @@ const AdminDashboard = () => {
         {activeTab === "users" && (
           <div className="p-4">
             <div className="bg-gray-800 rounded-lg p-4 mb-4">
-              <h3 className="text-base sm:text-lg font-bold mb-3">🔍 Search Users</h3>
+              <h2 className="text-base sm:text-lg font-bold mb-3">🔍 Search Users</h2>
               <div className="flex flex-col sm:flex-row gap-3">
                 <div className="flex-1">
                   <input
@@ -817,8 +817,15 @@ const AdminDashboard = () => {
                   />
                 </div>
                 <div className="sm:w-48">
-                  <select
-                    value={searchField}
+                  <label
+  htmlFor="searchField"
+  className="block text-sm text-gray-300 mb-1"
+>
+  Search Field
+</label>
+                 <select
+  id="searchField"
+  value={searchField}
                     onChange={(e) => setSearchField(e.target.value)}
                     className="w-full p-2 rounded bg-gray-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
@@ -896,7 +903,8 @@ const AdminDashboard = () => {
                           
                           <td className="p-3">
                             <select
-                              key={`${user._id}-${user.role}`}
+  aria-label="Select User Role"
+  key={`${user._id}-${user.role}`}
                               value={user.role || "employee"}
                               onChange={(e) => updateRole(user._id, e.target.value)}
                               className="bg-gray-700 text-white text-xs p-1 rounded w-full"
@@ -1390,7 +1398,7 @@ const AdminDashboard = () => {
           </div>
         </div>
       )}
-    </div>
+   </main>
   );
 };
 

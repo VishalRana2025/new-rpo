@@ -1064,8 +1064,10 @@ localStorage.removeItem("dashboardCache");
         <div className="p-6 text-center border-b border-gray-700">
           <img src={logo} alt="Company Logo" className="h-12 w-auto mx-auto mb-3 bg-white p-1 rounded-lg" />
           <h1 className="text-xl font-bold text-yellow-400">
-            {isAdminView ? "Admin View" : "Client Onboarding"}
-          </h1>
+  {currentUser?.role?.toLowerCase() === "admin"
+    ? "Admin View"
+    : "Client View"}
+</h1>
           <p className="text-sm text-gray-400 mt-1 truncate">{currentUser?.employeeId}</p>
           <p className="text-xs text-blue-300 mt-1 truncate">{currentUser?.email}</p>
         </div>

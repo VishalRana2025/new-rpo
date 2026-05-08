@@ -474,7 +474,7 @@ const handleDesignationClick = (item) => {
   };
 
   return (
-   <div className="min-h-screen overflow-x-hidden bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+   <main className="min-h-screen overflow-x-hidden bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
     <div className="w-full max-w-[1600px] mx-auto px-3 sm:px-4 md:px-6 lg:px-8">
         
         {/* Header */}
@@ -552,9 +552,15 @@ const handleDesignationClick = (item) => {
         <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-4 mb-8 border border-gray-700">
           <div className="flex flex-wrap gap-4 items-center">
             <div className="flex items-center gap-2">
-              <label className="text-sm text-gray-400">Time Range:</label>
-              <select
-                value={filterDays}
+           <label
+  htmlFor="timeRange"
+  className="text-sm text-gray-300"
+>
+  Time Range:
+</label>
+            <select
+  id="timeRange"
+  value={filterDays}
                 onChange={(e) => setFilterDays(parseInt(e.target.value))}
                 className="bg-gray-900 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
               >
@@ -782,7 +788,7 @@ className="w-full h-[64px] bg-[#0f172a] border border-gray-700 rounded-md px-4 f
       </div>
 
       <ActivityPopup isOpen={popupOpen} onClose={closePopup} data={popupData} />
-    </div>
+   </main>
   );
 };
 
