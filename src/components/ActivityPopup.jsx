@@ -84,7 +84,7 @@ const ActivityPopup = ({ isOpen, onClose, data }) => {
     >
 
       <div className="flex justify-between items-center mb-2">
-
+ c
     <span className="text-white font-semibold">
   {candidate.name || candidate.candidateName}
 </span>
