@@ -32,6 +32,8 @@ const Home = () => {
   const [closedClientData, setClosedClientData] = useState([]);
   const [joinedCandidates, setJoinedCandidates] = useState([]);
   const [designationData, setDesignationData] = useState([]);
+  const [remainingCandidates, setRemainingCandidates] = useState(0);
+  const [noClientCandidates, setNoClientCandidates] = useState([]);
   
   // Popup state
   const [popupOpen, setPopupOpen] = useState(false);
@@ -278,12 +280,55 @@ setDesignationData(formattedDesignationData);
       
       setAllClients(chartClients);
       
-      const openCandidates = candidates.filter(c => 
-        c.status && c.status.toLowerCase() !== "rejected"
-      );
-      
+     const totalCandidates = candidates.length;
+
+let assignedCandidates = 0;
+
+const noClientList = [];
+
+candidates.forEach((candidate) => {
+
+  const lastSection =
+    candidate.clientSections?.length
+      ? candidate.clientSections[
+          candidate.clientSections.length - 1
+        ]
+      : null;
+
+  const hasClient =
+    lastSection?.clientName &&
+    lastSection.clientName.trim() !== "";
+
+  if (hasClient) {
+
+    assignedCandidates++;
+
+  } else {
+
+    noClientList.push({
+
+      candidateName:
+        `${candidate.firstName || ""} ${candidate.lastName || ""}`.trim(),
+
+      designation:
+        candidate.designation || "No Designation",
+
+      status:
+        candidate.status || "N/A"
+
+    });
+
+  }
+
+});
+const remainingCandidates =
+  totalCandidates - assignedCandidates;
+
+setRemainingCandidates(remainingCandidates);
+setNoClientCandidates(noClientList);
+  totalCandidates - assignedCandidates;
       const clientMap = {};
-      for (const c of openCandidates) {
+for (const c of candidates) {
         let lastClient = null;
         if (Array.isArray(c.clientSections) && c.clientSections.length > 0) {
           for (let i = c.clientSections.length - 1; i >= 0; i--) {
@@ -423,6 +468,19 @@ joinedList.push({
     if (!data || !data.date) return;
     navigate(`/clients?name=${encodeURIComponent(data.date)}`);
   };
+  const handleNoClientClick = () => {
+
+  setPopupData({
+    actionType: "No Clients",
+    details: noClientCandidates,
+    count: noClientCandidates.length,
+    date: "No Clients",
+    type: "no-client"
+  });
+
+  setPopupOpen(true);
+
+};
 const handleDesignationClick = (item) => {
 
   setPopupData({
@@ -610,12 +668,28 @@ const handleDesignationClick = (item) => {
 
         {/* CLIENTS DISTRIBUTION CHART */}
         <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700 mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-white">🏢 Open Candidates On Clients</h2>
-            <div className="text-sm text-blue-400 bg-blue-500/10 px-3 py-1 rounded-full">
-              Total Clients: {allClients.length}
-            </div>
-          </div>
+         <div className="flex items-center justify-between mb-4">
+
+  <h2 className="text-xl font-bold text-white">
+    🏢 Open Candidates On Clients
+  </h2>
+
+  <div className="flex items-center gap-3">
+
+  <div
+  onClick={handleNoClientClick}
+  className="text-sm font-semibold text-red-300 bg-red-500/10 border border-red-500/20 px-5 py-2 rounded-xl cursor-pointer hover:bg-red-500/20 transition-all"
+>
+  No Clients: {remainingCandidates}
+</div>
+
+    <div className="text-sm text-blue-400 bg-blue-500/10 px-3 py-1 rounded-full">
+      Total Clients: {allClients.length}
+    </div>
+
+  </div>
+
+</div>
 
           {allClients.length === 0 ? (
             <div className="text-center py-8 text-gray-400">No client data available</div>

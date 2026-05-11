@@ -74,7 +74,7 @@ const ActivityPopup = ({ isOpen, onClose, data }) => {
               
               {/* Recruiter List */}
               <div className="space-y-2 max-h-96 overflow-y-auto">
-{type === "designation" ? (
+{type === "designation" || type === "no-client" ? (
 
   details.map((candidate, index) => (
 
@@ -85,20 +85,22 @@ const ActivityPopup = ({ isOpen, onClose, data }) => {
 
       <div className="flex justify-between items-center mb-2">
 
-        <span className="text-white font-semibold">
-          {candidate.name}
-        </span>
-
+    <span className="text-white font-semibold">
+  {candidate.name || candidate.candidateName}
+</span>
         <span className={`text-xs ${textColorClass}`}>
           {candidate.status}
         </span>
 
       </div>
 
-      <p className="text-sm text-blue-400">
-        Client: {candidate.clientName}
-      </p>
+    <p className="text-sm text-blue-400">
+  Client: {candidate.clientName || "Not Added"}
+</p>
 
+<p className="text-sm text-gray-400 mt-1">
+  Designation: {candidate.designation || "No Designation"}
+</p>
     </div>
 
   ))
