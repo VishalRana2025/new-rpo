@@ -170,7 +170,7 @@ const ActivityPopup = ({ isOpen, onClose, data }) => {
               <div className="mt-4 pt-3 border-t border-gray-700 flex justify-between items-center">
                 <span className="text-sm text-gray-400">Total Recruiters</span>
                 <span className={`text-lg font-semibold ${textColorClass}`}>
-                  {details.length}
+                 {details.reduce((sum, item) => sum + (item.count || 0), 0)}
                 </span>
               </div>
               <div className="flex justify-between items-center">

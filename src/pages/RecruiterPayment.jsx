@@ -200,8 +200,8 @@ return {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
-      <div className="max-w-[1400px] mx-auto p-6">
+  <div className="min-h-screen overflow-x-hidden bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+    <div className="w-full max-w-full p-3 lg:p-5 flex flex-col">
         
         {/* Header */}
         <div className="mb-8">
@@ -212,7 +212,7 @@ return {
         </div>
 
         {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
           <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700">
             <div className="flex items-center justify-between">
               <div>
@@ -281,9 +281,9 @@ return {
             </p>
           </div>
           
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-900/50">
+     <div className="overflow-x-auto overflow-y-auto max-h-[500px] w-full">
+            <table className="w-full min-w-[900px] xl:min-w-full text-xs lg:text-sm">
+              <thead className="bg-gray-900/95 sticky top-0 z-20 backdrop-blur-sm">
                 <tr className="border-b border-gray-700">
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">#</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Candidate Name</th>
@@ -292,6 +292,7 @@ return {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Payout (₹)</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Payout %</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Payment Term</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Payout Amount</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase">
   Joined Date
 </th>
@@ -371,6 +372,11 @@ return {
                           {row.term}
                         </span>
                       </td>
+                      <td className="px-6 py-4">
+  <span className="text-gray-400 font-semibold">
+    N/A
+  </span>
+</td>
                       <td className="px-6 py-4 text-sm text-gray-300">
   {row.joinedDate !== "-" 
     ? new Date(row.joinedDate).toLocaleDateString("en-IN") 
@@ -391,16 +397,16 @@ return {
           {/* Footer with summary */}
           {tableData.length > 0 && (
             <div className="bg-gray-900/50 px-6 py-4 border-t border-gray-700">
-              <div className="flex justify-between items-center">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                 <div className="text-gray-400 text-sm">
                   Showing {tableData.length} joined candidates out of {candidates.length} total candidates
                 </div>
-                <div className="flex gap-6">
-                  <div className="text-sm">
+               <div className="grid grid-cols-2 sm:flex gap-4 sm:gap-6 w-full sm:w-auto">
+                  <div className="text-sm break-words">
                     <span className="text-gray-400">Total Payout: </span>
                     <span className="text-green-400 font-semibold">₹{totalPayout.toLocaleString()}</span>
                   </div>
-                  <div className="text-sm">
+                <div className="text-sm break-words">
                     <span className="text-gray-400">Average Payout %: </span>
                     <span className="text-yellow-400 font-semibold">{avgPercent}%</span>
                   </div>

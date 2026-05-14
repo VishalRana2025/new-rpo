@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api";
 import RequirementFormPage from "./RequirementForm";
@@ -6,7 +6,7 @@ import RequirementFormPage from "./RequirementForm";
 const AllRequirements = () => {
   const navigate = useNavigate();
   const [requirements, setRequirements] = useState([]);
-  const [filteredRequirements, setFilteredRequirements] = useState([]);
+  // const [filteredRequirements, setFilteredRequirements] = useState([]);
   const [editDynamicFields, setEditDynamicFields] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [editingRequirementId, setEditingRequirementId] = useState(null);
@@ -23,10 +23,7 @@ const AllRequirements = () => {
   const [showAddPopup, setShowAddPopup] = useState(false);
   const [showEditPopup, setShowEditPopup] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    const savedTheme = localStorage.getItem("theme");
-    return savedTheme ? savedTheme === "dark" : true;
-  });
+
   const [isLoading, setIsLoading] = useState(false);
 
   // Current user and role checks
@@ -169,30 +166,30 @@ const AllRequirements = () => {
     };
   }, []);
 
-  // Filtering effect
-  useEffect(() => {
-    let data = [...requirements];
+  // // Filtering effect
+  // useEffect(() => {
+  //   let data = [...requirements];
 
-    if (searchTerm.trim() !== "") {
-      const searchLower = searchTerm.toLowerCase();
-      data = data.filter((req) =>
-        req.clientName?.toLowerCase().includes(searchLower) ||
-        req.agent?.toLowerCase().includes(searchLower) ||
-        req.process?.toLowerCase().includes(searchLower) ||
-        req.designationPosition?.toLowerCase().includes(searchLower) ||
-        req.requirementType?.toLowerCase().includes(searchLower) ||
-        req.budget?.toLowerCase().includes(searchLower) ||
-        req.requirementStatus?.toLowerCase().includes(searchLower) ||
-        req.clientLocation?.toLowerCase().includes(searchLower)
-      );
-    }
+  //   if (searchTerm.trim() !== "") {
+  //     const searchLower = searchTerm.toLowerCase();
+  //     data = data.filter((req) =>
+  //       req.clientName?.toLowerCase().includes(searchLower) ||
+  //       req.agent?.toLowerCase().includes(searchLower) ||
+  //       req.process?.toLowerCase().includes(searchLower) ||
+  //       req.designationPosition?.toLowerCase().includes(searchLower) ||
+  //       req.requirementType?.toLowerCase().includes(searchLower) ||
+  //       req.budget?.toLowerCase().includes(searchLower) ||
+  //       req.requirementStatus?.toLowerCase().includes(searchLower) ||
+  //       req.clientLocation?.toLowerCase().includes(searchLower)
+  //     );
+  //   }
 
-    if (statusFilter !== "") {
-      data = data.filter((req) => req.requirementStatus === statusFilter);
-    }
+  //   if (statusFilter !== "") {
+  //     data = data.filter((req) => req.requirementStatus === statusFilter);
+  //   }
 
-    setFilteredRequirements(data);
-  }, [searchTerm, requirements, statusFilter]);
+  //   setFilteredRequirements(data);
+  // }, [searchTerm, requirements, statusFilter]);
 
   const handleRefresh = () => {
     console.log("🔄 Manual refresh - clearing cache");
@@ -333,7 +330,33 @@ const AllRequirements = () => {
   };
 
   const clearSearch = () => setSearchTerm("");
+const filteredRequirements = useMemo(() => {
+  let data = [...requirements];
 
+  if (searchTerm.trim() !== "") {
+    const searchLower = searchTerm.toLowerCase();
+
+    data = data.filter(
+      (req) =>
+        req.clientName?.toLowerCase().includes(searchLower) ||
+        req.agent?.toLowerCase().includes(searchLower) ||
+        req.process?.toLowerCase().includes(searchLower) ||
+        req.designationPosition?.toLowerCase().includes(searchLower) ||
+        req.requirementType?.toLowerCase().includes(searchLower) ||
+        req.budget?.toLowerCase().includes(searchLower) ||
+        req.requirementStatus?.toLowerCase().includes(searchLower) ||
+        req.clientLocation?.toLowerCase().includes(searchLower)
+    );
+  }
+
+  if (statusFilter !== "") {
+    data = data.filter(
+      (req) => req.requirementStatus === statusFilter
+    );
+  }
+
+  return data;
+}, [requirements, searchTerm, statusFilter]);
   const getFileIcon = (fileType) => {
     if (!fileType) return "📎";
     const type = fileType.toLowerCase();
@@ -439,20 +462,19 @@ const AllRequirements = () => {
     } catch(e) {}
     return null;
   };
-
-  return (
-    <div className="min-h-screen bg-black text-gray-100">
-      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
+return (
+  <main className="min-h-screen bg-black text-gray-100">
+      <div className="w-full px-2 sm:px-4 lg:px-6 py-4 sm:py-6">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 w-full">
+         <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 w-full">
             <div>
               <h1 className="text-2xl font-semibold text-white">Requirements</h1>
               <p className="text-sm text-gray-400 mt-1">
                 {isEmployee ? "View assigned requirements" : "Manage client requirements"}
               </p>
             </div>
-            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+         <div className="flex flex-col lg:flex-row gap-3 w-full xl:w-auto">
               <div className="relative">
                 <input
                   type="text"
@@ -524,7 +546,7 @@ const AllRequirements = () => {
 
         {/* Stats Cards - Clickable */}
       {filteredRequirements.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
             <div 
               onClick={() => setStatusFilter("")}
               className={`bg-gray-900 rounded-lg p-4 border border-gray-800 shadow-sm cursor-pointer hover:scale-105 transition-all duration-200 ${
@@ -594,8 +616,8 @@ const AllRequirements = () => {
           </div>
         ) : (
 <div className="bg-[#0f172a]/95 backdrop-blur-sm rounded-2xl border border-blue-500/10 shadow-2xl overflow-hidden">
-            <div className="overflow-auto max-h-[650px]">
-             <table className="w-full text-sm relative min-w-[1800px]">
+      <div className="overflow-x-auto overflow-y-auto max-h-[650px]">
+           <table className="w-full text-xs sm:text-sm relative min-w-[900px] xl:min-w-[1200px]">
           <thead className="bg-[#374151] border-b border-gray-500/20 sticky top-0 z-20 shadow-lg">
                   <tr>
                     {isEmployee ? (
@@ -666,7 +688,7 @@ const AllRequirements = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredRequirements.map((req, index) => {
+                  {filteredRequirements.slice(0, 20).map((req, index) => {
                     const requirementId = req._id || req.id;
                    const fileUploads = Array.isArray(req.fileUploads) ? req.fileUploads : [];
                     
@@ -736,17 +758,33 @@ const AllRequirements = () => {
                           <>
                             <td className="px-4 py-3 text-gray-300">{index + 1}</td>
                             <td className="px-4 py-3">
-                              {canEditDelete ? (
-                                <select
-                                  value={req.requirementStatus || "Open"}
-                                  onChange={(e) => updateRequirementStatus(requirementId, e.target.value)}
-                                  className="bg-gray-800 border border-gray-700 text-gray-100 rounded px-2 py-1 text-sm cursor-pointer"
-                                >
-                                  <option value="Open">Open</option>
-                                  <option value="Close">Close</option>
-                                  <option value="On Hold">On Hold</option>
-                                </select>
-                              ) : (
+  {canEditDelete ? (
+    <>
+      <label
+        htmlFor={`status-${requirementId}`}
+        className="sr-only"
+      >
+        Requirement Status
+      </label>
+
+      <select
+        id={`status-${requirementId}`}
+        aria-label="Requirement Status"
+        value={req.requirementStatus || "Open"}
+        onChange={(e) =>
+          updateRequirementStatus(
+            requirementId,
+            e.target.value
+          )
+        }
+        className="bg-gray-800 border border-gray-700 text-gray-100 rounded px-2 py-1 text-sm cursor-pointer"
+      >
+        <option value="Open">Open</option>
+        <option value="Close">Close</option>
+        <option value="On Hold">On Hold</option>
+      </select>
+    </>
+  ) : (
                                 <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getStatusBadgeStyle(req.requirementStatus)}`}>
                                   {req.requirementStatus || "Open"}
                                 </span>
@@ -1164,7 +1202,7 @@ const AllRequirements = () => {
           </div>
         </div>
       )}
-    </div>
+    </main>
   );
 };
 

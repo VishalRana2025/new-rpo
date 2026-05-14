@@ -22,7 +22,6 @@ const AdminDashboard = () => {
   const [loginHistory, setLoginHistory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [mainAdmin, setMainAdmin] = useState(null);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Password change states
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -660,26 +659,13 @@ const AdminDashboard = () => {
   }
 
   return (
-   <main className="flex flex-col min-h-screen bg-gray-900 text-white">
+   <main className="flex flex-col min-h-screen bg-gray-900 text-white overflow-x-hidden">
       
-      {/* Mobile Menu Button */}
-      <button
-        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-        className="fixed top-4 left-4 z-50 md:hidden bg-blue-600 p-2 rounded-lg shadow-lg"
-      >
-        {mobileMenuOpen ? "✕" : "☰"}
-      </button>
+    
 
-      {/* Mobile Overlay */}
-      {mobileMenuOpen && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-30 md:hidden"
-          onClick={() => setMobileMenuOpen(false)}
-        />
-      )}
-
+    
       {/* Main Content */}
-      <div className="flex-1 overflow-y-auto w-full">
+   <div className="flex-1 flex flex-col w-full overflow-y-auto">
         <div className="bg-gradient-to-r from-blue-900 to-purple-900 p-4 sticky top-0 z-10">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
             <div>
@@ -803,7 +789,7 @@ const AdminDashboard = () => {
         
         {/* Users Tab */}
         {activeTab === "users" && (
-          <div className="p-4">
+<div className="p-4 flex-1 overflow-y-auto">
             <div className="bg-gray-800 rounded-lg p-4 mb-4">
               <h2 className="text-base sm:text-lg font-bold mb-3">🔍 Search Users</h2>
               <div className="flex flex-col sm:flex-row gap-3">
@@ -854,21 +840,21 @@ const AdminDashboard = () => {
               )}
             </div>
             
-            <div className="bg-gray-800 rounded-lg overflow-hidden">
-              <div className="overflow-x-auto w-full">
+           <div className="bg-gray-800 rounded-lg overflow-hidden">
+             <div className="overflow-x-auto overflow-y-auto max-h-[500px] w-full">
                 <table className="min-w-[1000px] w-full text-xs sm:text-sm">
-                  <thead className="bg-gray-700">
+                 <thead className="bg-gray-700">
                     <tr className="text-gray-300">
-                      <th className="p-3 text-left">#</th>
-                      <th className="p-3 text-left">Name</th>
-                      <th className="p-3 text-left">Email</th>
-                      <th className="p-3 text-left">Emp ID</th>
-                      <th className="p-3 text-left">Dept</th>
-                      <th className="p-3 text-left">Role</th>
-                      <th className="p-3 text-left">Status</th>
-                      <th className="p-3 text-left">Active</th>
-                      <th className="p-3 text-left">Permissions</th>
-                      <th className="p-3 text-left">Actions</th>
+                     <th className="p-3 text-left sticky top-0 bg-gray-700">#</th>
+                     <th className="p-3 text-left sticky top-0 bg-gray-700">Name</th>
+                     <th className="p-3 text-left sticky top-0 bg-gray-700">Email</th>
+                     <th className="p-3 text-left sticky top-0 bg-gray-700">Emp ID</th>
+                     <th className="p-3 text-left sticky top-0 bg-gray-700">Dept</th>
+                     <th className="p-3 text-left sticky top-0 bg-gray-700">Role</th>
+                    <th className="p-3 text-left sticky top-0 bg-gray-700">Status</th>
+                      <th className="p-3 text-left sticky top-0 bg-gray-700">Active</th>
+                     <th className="p-3 text-left sticky top-0 bg-gray-700">Permissions</th>
+                     <th className="p-3 text-left sticky top-0 bg-gray-700">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1102,9 +1088,9 @@ const AdminDashboard = () => {
                   No login history available yet.
                 </div>
               ) : (
-                <div className="overflow-x-auto w-full">
+               <div className="overflow-x-auto overflow-y-auto max-h-[600px] w-full">
                   <table className="min-w-[800px] w-full text-xs sm:text-sm">
-                    <thead className="bg-gray-700">
+                   <thead className="bg-gray-700 sticky top-0 z-20">
                       <tr className="text-gray-300">
                         <th className="p-3 text-left">User</th>
                         <th className="p-3 text-left">Email</th>

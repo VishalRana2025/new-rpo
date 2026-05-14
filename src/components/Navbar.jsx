@@ -17,47 +17,42 @@ const Navbar = () => {
 
   const goToHome = () => {
     localStorage.setItem("activePage", "home");
-
     navigate("/");
   };
+return (
+  <nav className="bg-blue-600 text-white p-3 shadow-lg sticky top-0 z-50">
+   <div className="w-full flex items-center justify-between px-4">
+      {/* Left Side */}
+      <div className="flex items-center">
+        <button
+          onClick={goToHome}
+         className="
+  font-semibold
+  text-sm sm:text-base md:text-lg
+  whitespace-nowrap
+  absolute left-1/2 -translate-x-1/2
+  md:static md:translate-x-0 md:ml-16
+"
+        >
+          Recruiter App
+        </button>
+      </div>
 
-  return (
-    <nav className="bg-blue-600 text-white p-4 shadow-lg">
-      <div className="container mx-auto flex justify-between items-center">
-
-        <div className="flex items-center space-x-4 ml-[-90px]">
-          {currentUser && (
-            <>
-              <button
-                onClick={goToHome}
-                className="hover:text-gray-200 transition font-semibold"
-              >
-               Recruiter  App
-              </button>
-
-              {/* <span className="text-xs bg-blue-500 px-2 py-1 rounded">
-                {role === 'admin'
-                  ? 'Admin'
-                  : role === 'manager'
-                  ? 'Manager'
-                  : 'Employee'}
-              </span> */}
-            </>
-          )}
-        </div>
-
+      {/* Logout Button */}
+      <div className="ml-auto">
         {currentUser && (
           <button
             onClick={handleLogout}
-            className="bg-red-500 hover:bg-red-600 px-4 py-2 rounded transition"
+            className="bg-red-500 hover:bg-red-600 px-3 sm:px-4 py-2 rounded transition text-sm whitespace-nowrap"
           >
             Logout
           </button>
         )}
-
       </div>
-    </nav>
-  );
+
+    </div>
+  </nav>
+);
 };
 
 export default Navbar;
