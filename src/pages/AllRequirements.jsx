@@ -23,7 +23,8 @@ const AllRequirements = () => {
   const [showAddPopup, setShowAddPopup] = useState(false);
   const [showEditPopup, setShowEditPopup] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
-
+  const [page, setPage] = useState(1);
+const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
 
   // Current user and role checks
@@ -93,7 +94,7 @@ const AllRequirements = () => {
   name: file.name,
   type: file.type,
   url: file.url,
-  data: file.data   // ✅ IMPORTANT FIX
+  
 }))
       }));
       

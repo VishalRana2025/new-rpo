@@ -10,10 +10,11 @@ const ActivityChart = ({ data, onBarClick }) => {
   useEffect(() => {
     if (window.innerWidth < 640 && chartRef.current) {
    setTimeout(() => {
- chartRef.current.scrollLeft =
-  chartRef.current.scrollWidth -
-  chartRef.current.clientWidth;
-}, 100);
+
+  chartRef.current.scrollLeft =
+    chartRef.current.scrollWidth;
+
+}, 200);
     }
   }, [data]);
 
@@ -28,7 +29,12 @@ const ActivityChart = ({ data, onBarClick }) => {
 const isUpdatedChart =
   data.length > 0 &&
   data.every(item => item.create === 0);
-
+const isClientChart =
+  data.length > 0 &&
+  data.some(item =>
+    item.date &&
+    item.date.length > 10
+  );
   // Helper function to safely get details based on action
   const getDetailsByAction = (dayData, action) => {
     if (!dayData) return [];
@@ -131,13 +137,13 @@ const isUpdatedChart =
     legend: {
       show: false
     },
-    grid: {
-      left: "5%",
-      right: "5%",
-    bottom: window.innerWidth < 640 ? "12%" : "10%",
-      top: "10%",
-      containLabel: true
-    },
+   grid: {
+  left: "5%",
+  right: "5%",
+  bottom: "20%",
+  top: "10%",
+  containLabel: true
+},
     xAxis: {
       type: "category",
       data: dates,
@@ -147,6 +153,9 @@ const isUpdatedChart =
         rotate: 0,
         fontSize:isCreatedChart || isUpdatedChart? 9 : 11,
         interval: 0,
+        hideOverlap: false,
+showMinLabel: true,
+showMaxLabel: true,
         margin: 28,
        formatter: function (value) {
   const words = value.split(" ");
@@ -183,7 +192,7 @@ const isUpdatedChart =
       {
         name: "Create",
         type: "bar",
-        data: createData,
+        data: createData.map(v => v === 0 ? null : v),
         itemStyle: {
           color: function (params) {
             // ✅ only apply for client chart
@@ -207,7 +216,8 @@ const isUpdatedChart =
           shadowColor: "rgba(34, 197, 94, 0.3)",
           shadowBlur: 10
         },
-        barWidth: window.innerWidth < 640 ? 28 : 40,
+       barWidth: 32,
+barMinHeight: 2,
         label: {
           show: true,
           position: "top",
@@ -220,7 +230,7 @@ const isUpdatedChart =
       {
         name: "Update",
         type: "bar",
-        data: updateData,
+       data: updateData.map(v => v === 0 ? null : v),
         itemStyle: {
           color: function (params) {
             const colors = [
@@ -240,9 +250,10 @@ const isUpdatedChart =
           shadowColor: "rgba(59, 130, 246, 0.3)",
           shadowBlur: 10
         },
-    barWidth: window.innerWidth < 640 ? 28 : 40,
-barGap: "40%",
-barCategoryGap: "45%",
+  barWidth: 32,
+barMinHeight: 2,bottom: window.innerWidth < 640 ? "12%" : "10%",
+barGap: "-100%",
+barCategoryGap: "50%",
         label: {
           show: true,
           position: "top",
@@ -289,23 +300,22 @@ barCategoryGap: "45%",
   };
 
   // Determine chart width for horizontal scrolling on mobile
-  const getChartWidth = () => {
-   if (
-  window.innerWidth < 640 &&
-  (isCreatedChart || isUpdatedChart)
-) {
-     return `${Math.max(data.length * 90, window.innerWidth)}px`;
-    }
-    return "100%";
-  };
+ const getChartWidth = () => {
+  if (data.length >= 7) {
+    return `${data.length * 120}px`;
+  }
+
+  return "100%";
+};
 
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-full text-gray-400">Loading Chart...</div>}>
       <div
         ref={chartRef}
-        className={`w-full ${
-  window.innerWidth < 640 &&
-  (isCreatedChart || isUpdatedChart)
+       className={`w-full ${
+  isClientChart ||
+  (window.innerWidth < 640 &&
+    (isCreatedChart || isUpdatedChart))
     ? "overflow-x-auto overflow-y-hidden"
     : "h-full"
 }`}
@@ -320,9 +330,15 @@ barCategoryGap: "45%",
             click: handleChartClick
           }}
           style={{
-          height: window.innerWidth < 640 ? "260px" : "320px",
-            width: getChartWidth(),
-            minWidth: window.innerWidth < 640 ? "100%" : "auto"
+         height: "320px",
+            width: isClientChart
+  ? `${data.length * 210}px`
+  : getChartWidth(),
+            minWidth: isClientChart
+  ? `${data.length * 180}px`
+  : window.innerWidth < 640
+    ? "100%"
+    : "auto"
           }}
         />
       </div>

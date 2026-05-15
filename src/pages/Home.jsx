@@ -77,58 +77,80 @@ const Home = () => {
   // Format chart data with createDetails and updateDetails
   const formatChartData = (data, activities) => {
     if (!data || Object.keys(data).length === 0) return defaultChartData;
+// Generate last X days including today
+const allDates = [];
 
-    const formatted = Object.keys(data)
-      .map((date) => {
-        const d = data[date] || {};
+for (let i = filterDays - 1; i >= 0; i--) {
+  const d = new Date();
+  d.setDate(d.getDate() - i);
 
-        const dateParts = date.split("/");
-        const dateObj = new Date(`${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`);
-        const dateStr = dateObj.toISOString().split("T")[0];
+ const day = String(d.getDate()).padStart(2, "0");
+const month = String(d.getMonth() + 1).padStart(2, "0");
+const year = d.getFullYear();
 
-        const dateActivities = (activities || []).filter(act => {
-          let actDate = "";
-          if (act.action === "CREATE") {
-            actDate = new Date(act.createdAt).toISOString().split("T")[0];
-          } else if (act.action === "UPDATE") {
-            actDate = new Date(act.updatedAt || act.createdAt).toISOString().split("T")[0];
-          }
-          return actDate === dateStr && act.module === "candidate";
-        });
+const formattedDate = `${day}/${month}/${year}`;
 
-        const createActivities = dateActivities
-          .filter(act => act.action === "CREATE")
-          .filter(
-            (act, index, self) =>
-              index === self.findIndex(a => a._id === act._id)
-          );
-        const updateActivities = dateActivities
-          .filter(act => act.action === "UPDATE")
-          .filter(
-            (act, index, self) =>
-              index === self.findIndex(a => a._id === act._id)
-          );
+  allDates.push(formattedDate);
+}
 
-        const createDetails = groupByUser(createActivities);
-        const updateDetails = groupByUser(updateActivities);
+const formatted = allDates.map((date) => {
+  const d = data[date] || {};
 
-        return {
-          date,
-          // ✅ use actual filtered activity counts
-          create: createActivities.length,
-          update: updateActivities.length,
-          createDetails: createDetails,
-          updateDetails: updateDetails,
-        };
-      })
-      .filter((item) => item && item.date)
-      .sort(
-        (a, b) =>
-          new Date(a.date.split("/").reverse().join("-")) -
-          new Date(b.date.split("/").reverse().join("-"))
-      );
+  const dateParts = date.split("/");
+  const dateObj = new Date(
+    `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`
+  );
+const year = dateParts[2];
+const month = dateParts[1];
+const day = dateParts[0];
 
-    return formatted.length > 0 ? formatted : defaultChartData;
+const dateStr = `${year}-${month}-${day}`;
+
+  const dateActivities = (activities || []).filter((act) => {
+    let actDate = "";
+
+    if (act.action === "CREATE") {
+      actDate = new Date(act.createdAt)
+        .toISOString()
+        .split("T")[0];
+    } else if (act.action === "UPDATE") {
+      actDate = new Date(
+        act.updatedAt || act.createdAt
+      )
+        .toISOString()
+        .split("T")[0];
+    }
+
+    return (
+      actDate === dateStr &&
+      act.module === "candidate"
+    );
+  });
+
+  const createActivities = dateActivities
+    .filter((act) => act.action === "CREATE")
+    .filter(
+      (act, index, self) =>
+        index === self.findIndex((a) => a._id === act._id)
+    );
+
+  const updateActivities = dateActivities
+    .filter((act) => act.action === "UPDATE")
+    .filter(
+      (act, index, self) =>
+        index === self.findIndex((a) => a._id === act._id)
+    );
+
+  return {
+    date,
+    create: createActivities.length,
+    update: updateActivities.length,
+    createDetails: groupByUser(createActivities),
+    updateDetails: groupByUser(updateActivities),
+  };
+});
+
+return formatted;
   };
 
   // LOAD FROM CACHE INSTANTLY
